@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+user-service/node_modules/
+course-service/node_modules/
+
+# Logs
+logs
+*.log
+
+# Build
+dist/
+dist-ssr/
+
+# Local env
+.env
+*.local
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
