@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Card from "../components/Card";
+import Button from "../components/Button";
 
 const WEATHER_API_URL = "http://localhost:4004";
 
@@ -9,17 +11,20 @@ export default function WeatherPage() {
   const [ttl, setTtl] = useState("");
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState("");
+  const sampleCities = ["oslo", "ljubljana", "maribor"];
 
-  async function handleGet(e) {
-    e.preventDefault();
+  // optional cityParam lets buttons fetch without changing the input first
+  async function handleGet(e, cityParam) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
     setMessage("");
     setResult(null);
-    if (!city) {
+    const target = cityParam ?? city;
+    if (!target) {
       setMessage("Enter a city name.");
       return;
     }
     try {
-      const res = await fetch(`${WEATHER_API_URL}/weather/${encodeURIComponent(city)}`);
+      const res = await fetch(`${WEATHER_API_URL}/weather/${encodeURIComponent(target)}`);
       if (res.status === 404) {
         setMessage("No data for that city.");
         return;
@@ -107,49 +112,54 @@ export default function WeatherPage() {
 
   return (
     <div>
-      <h1>Weather</h1>
-      <p>Simple UI to store and retrieve weather data (cached in Redis).</p>
+      <h1 className="text-2xl font-bold mb-4">Weather</h1>
+      <Card>
+        <p className="mb-3">Simple UI to store and retrieve weather data (cached in Redis).</p>
 
-      <form style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "12px" }} onSubmit={(e) => e.preventDefault()}>
-        <input
-          placeholder="city"
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-        />
-        <button onClick={handleGet}>Get</button>
-        <button onClick={handleDelete} style={{ marginLeft: "8px" }}>Delete</button>
-      </form>
-
-      <h2>Store / Update</h2>
-      <form onSubmit={handlePut} style={{ display: "flex", flexDirection: "column", maxWidth: "400px", gap: "8px" }}>
-        <input placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
-        <input type="number" placeholder="tempC" value={tempC} onChange={(e) => setTempC(e.target.value)} />
-        <input placeholder="conditions" value={conditions} onChange={(e) => setConditions(e.target.value)} />
-        <input type="number" placeholder="ttl (seconds, optional)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
-        <button type="submit">Save</button>
-      </form>
-
-      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
-
-      {result && (
-        <div style={{ marginTop: "12px" }}>
-          <h3>Result</h3>
-          <div>City: <strong>{result.city}</strong></div>
-          <div>TempC: <strong>{String(result.tempC)}</strong></div>
-          <div>Conditions: <strong>{result.conditions}</strong></div>
-          <div>Timestamp: <strong>{result.timestamp}</strong></div>
-          {result.ttl !== undefined && result.ttl !== null ? (
-            result.expiresAt ? (
-              <div>Expires in: <strong>{result.ttl} seconds</strong> (<strong>{result.expiresAt}</strong>)</div>
-            ) : (
-              <div>Expires in: <strong>{result.ttl} seconds</strong></div>
-            )
-          ) : (
-            <div>Expiry: <strong>persistent</strong></div>
-          )}
-          {result.source && <div>Source: <strong>{result.source}</strong></div>}
+        <div className="flex items-center gap-3 mb-3">
+          <input className="p-2 rounded bg-slate-700" placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
+          <Button onClick={(e) => handleGet(e)}>Get</Button>
+          <Button variant="danger" onClick={handleDelete}>Delete</Button>
         </div>
-      )}
+
+        <div className="mb-4">
+          <span className="mr-3 text-sm text-slate-300">Quick cities:</span>
+          {sampleCities.map((c) => (
+            <Button key={c} variant="ghost" onClick={() => { setCity(c); handleGet(null, c); }} className="mr-2">{c}</Button>
+          ))}
+        </div>
+
+        <h2 className="font-semibold">Store / Update</h2>
+        <form onSubmit={handlePut} className="flex flex-col max-w-md gap-3">
+          <input className="p-2 rounded bg-slate-700" placeholder="city" value={city} onChange={(e) => setCity(e.target.value)} />
+          <input className="p-2 rounded bg-slate-700" type="number" placeholder="tempC" value={tempC} onChange={(e) => setTempC(e.target.value)} />
+          <input className="p-2 rounded bg-slate-700" placeholder="conditions" value={conditions} onChange={(e) => setConditions(e.target.value)} />
+          <input className="p-2 rounded bg-slate-700" type="number" placeholder="ttl (seconds, optional)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
+          <Button type="submit">Save</Button>
+        </form>
+
+        {message && <p className="mt-3">{message}</p>}
+
+        {result && (
+          <div className="mt-4">
+            <h3 className="font-semibold">Result</h3>
+            <div>City: <strong>{result.city}</strong></div>
+            <div>TempC: <strong>{String(result.tempC)}</strong></div>
+            <div>Conditions: <strong>{result.conditions}</strong></div>
+            <div>Timestamp: <strong>{result.timestamp}</strong></div>
+            {result.ttl !== undefined && result.ttl !== null ? (
+              result.expiresAt ? (
+                <div>Expires in: <strong>{result.ttl} seconds</strong> (<strong>{result.expiresAt}</strong>)</div>
+              ) : (
+                <div>Expires in: <strong>{result.ttl} seconds</strong></div>
+              )
+            ) : (
+              <div>Expiry: <strong>persistent</strong></div>
+            )}
+            {result.source && <div>Source: <strong>{result.source}</strong></div>}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

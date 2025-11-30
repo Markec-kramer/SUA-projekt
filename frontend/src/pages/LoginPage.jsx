@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Card from "../components/Card";
+import Button from "../components/Button";
 
 const API_URL = "http://localhost:4001";
 
@@ -41,23 +43,27 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h2>Prijava</h2>
-      <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", maxWidth: "300px", gap: "8px" }}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Geslo"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button type="submit">Prijava</button>
-      </form>
-      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
+      <Card>
+        <h2 className="text-xl font-semibold mb-3">Prijava</h2>
+        <form onSubmit={handleLogin} className="flex flex-col max-w-xs gap-3">
+          <input
+            className="p-2 rounded bg-slate-700"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="p-2 rounded bg-slate-700"
+            type="password"
+            placeholder="Geslo"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Button type="submit">Prijava</Button>
+        </form>
+        {message && <p className="mt-3">{message}</p>}
+      </Card>
     </div>
   );
 }

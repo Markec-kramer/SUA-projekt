@@ -112,9 +112,34 @@ services:
     ports:
       - "4004:4004"
 
+  recommendation-db:
+    image: redis:7-alpine
+    container_name: recommendation-db
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - recommendation_db_data:/data
+
+  recommendation-service:
+    build: ./recommendation-service
+    container_name: recommendation-service
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: recommendation-db
+      REDIS_PORT: 6379
+      PORT: 4005
+      DEFAULT_TTL: 86400
+      CORS_ORIGIN: '*'
+    depends_on:
+      - recommendation-db
+    ports:
+      - "4005:4005"
+
 
 volumes:
   user_db_data:
   course_db_data:
   planner_db_data:
   weather_db_data:
+  recommendation_db_data:

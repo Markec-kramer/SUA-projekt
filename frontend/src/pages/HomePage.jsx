@@ -4,12 +4,15 @@ export default function HomePage() {
 
   return (
     <div>
-      <h1>Online Learning Platform</h1>
-      {user ? (
-        <p>Prijavljen si kot <strong>{user.name}</strong> ({user.email})</p>
-      ) : (
-        <p>Nisi prijavljen.</p>
-      )}
+      {/* Use Card for consistent layout */}
+      <div className="card">
+        <h1 className="text-2xl font-bold mb-2">Online Learning Platform</h1>
+        {user ? (
+          <p>Prijavljen si kot <strong>{user.name}</strong> ({user.email})</p>
+        ) : (
+          <p>Nisi prijavljen.</p>
+        )}
+      </div>
     </div>
   );
 }

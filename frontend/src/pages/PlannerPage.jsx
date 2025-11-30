@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import Card from "../components/Card";
+import Button from "../components/Button";
 
 const PLANNER_API_URL = "http://localhost:4003";
 
@@ -12,16 +14,18 @@ export default function PlannerPage() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [message, setMessage] = useState("");
-
-  if (!user) {
-    return <p>Dostop dovoljen samo prijavljenim uporabnikom.</p>;
-  }
+  const userId = user?.id;
 
   // Load sessions on mount
   useEffect(() => {
     async function loadSessions() {
+      if (!userId) {
+        // nothing to load when no user
+        setSessions([]);
+        return;
+      }
       try {
-        const res = await fetch(`${PLANNER_API_URL}/study-sessions?user_id=${user.id}`);
+        const res = await fetch(`${PLANNER_API_URL}/study-sessions?user_id=${userId}`);
         const data = await res.json();
         setSessions(data);
       } catch (err) {
@@ -31,7 +35,7 @@ export default function PlannerPage() {
     }
 
     loadSessions();
-  }, []);
+  }, [userId]);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -106,75 +110,62 @@ export default function PlannerPage() {
     }
   }
 
+  if (!user) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">Study Planner</h1>
+        <Card>
+          <p>Dostop dovoljen samo prijavljenim uporabnikom.</p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1>Study Planner</h1>
-      <p>Prijavljen si kot <strong>{user.name}</strong></p>
+      <h1 className="text-2xl font-bold mb-4">Study Planner</h1>
+      <Card>
+        <p>Prijavljen si kot <strong>{user.name}</strong></p>
 
-      <h2>Dodaj nov study session</h2>
-      <form
-        onSubmit={handleCreate}
-        style={{ display: "flex", flexDirection: "column", maxWidth: "400px", gap: "8px" }}
-      >
-        <input
-          type="text"
-          placeholder="Naslov sessiona"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+        <h2 className="mt-4 font-semibold">Dodaj nov study session</h2>
+        <form onSubmit={handleCreate} className="flex flex-col max-w-lg gap-3">
+          <input className="p-2 rounded bg-slate-700" type="text" placeholder="Naslov sessiona" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className="p-2 rounded bg-slate-700" type="number" placeholder="Course ID" value={courseId} onChange={(e) => setCourseId(e.target.value)} />
+          <label className="text-sm">Začetni čas:</label>
+          <input className="p-2 rounded bg-slate-700" type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+          <label className="text-sm">Končni čas:</label>
+          <input className="p-2 rounded bg-slate-700" type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+          <Button type="submit">Dodaj session</Button>
+        </form>
 
-        <input
-          type="number"
-          placeholder="Course ID"
-          value={courseId}
-          onChange={(e) => setCourseId(e.target.value)}
-        />
+        {message && <p className="mt-3">{message}</p>}
 
-        <label>Začetni čas:</label>
-        <input
-          type="datetime-local"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-        />
-
-        <label>Končni čas:</label>
-        <input
-          type="datetime-local"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-        />
-
-        <button type="submit">Dodaj session</button>
-      </form>
-
-      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
-
-      <h2 style={{ marginTop: "20px" }}>Moji sessioni</h2>
-      {sessions.length === 0 ? (
-        <p>Ni še nobenega sessiona.</p>
-      ) : (
-        <ul>
-          {sessions.map((s) => (
-            <li key={s.id} style={{ marginBottom: "12px" }}>
-              <strong>{s.title}</strong> ({s.status}) <br />
-              Course ID: {s.course_id}<br />
-              Od: {s.start_time}<br />
-              Do: {s.end_time}<br />
-
-              {s.status !== "COMPLETED" && (
-                <button
-                  style={{ marginRight: "10px" }}
-                  onClick={() => handleComplete(s.id)}
-                >
-                  Complete
-                </button>
-              )}
-
-              <button onClick={() => handleDelete(s.id)}>Delete</button>
-            </li>
-          ))}
-        </ul>
-      )}
+        <h2 className="mt-6 font-semibold">Moji sessioni</h2>
+        {sessions.length === 0 ? (
+          <p>Ni še nobenega sessiona.</p>
+        ) : (
+          <ul>
+            {sessions.map((s) => (
+              <li key={s.id} className="mb-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <strong>{s.title}</strong> ({s.status}) <br />
+                    Course ID: {s.course_id}<br />
+                    Od: {s.start_time}<br />
+                    Do: {s.end_time}
+                  </div>
+                  <div className="flex gap-2">
+                    {s.status !== "COMPLETED" && (
+                      <Button variant="ghost" onClick={() => handleComplete(s.id)}>Complete</Button>
+                    )}
+                    <Button variant="danger" onClick={() => handleDelete(s.id)}>Delete</Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

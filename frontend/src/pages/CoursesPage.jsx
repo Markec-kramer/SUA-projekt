@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import Card from "../components/Card";
+import Button from "../components/Button";
 
 const COURSE_API_URL = "http://localhost:4002";
 
@@ -10,11 +12,6 @@ export default function CoursesPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState("");
-
-  // če ni prijavljen, ne kaže nič, samo info
-  if (!user) {
-    return <p>Dostop dovoljen samo prijavljenim uporabnikom.</p>;
-  }
 
   // naloži tečaje ob prvem renderju
   useEffect(() => {
@@ -89,51 +86,55 @@ export default function CoursesPage() {
     }
   }
 
+  // If user is not logged, we render a small message in the UI below; do not return early (hooks must run)
+  if (!user) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">Courses</h1>
+        <Card>
+          <p>Dostop dovoljen samo prijavljenim uporabnikom.</p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <h1>Courses</h1>
-      <p>Prijavljen si kot <strong>{user.name}</strong> ({user.email})</p>
+      <h1 className="text-2xl font-bold mb-4">Courses</h1>
+      <Card>
+        <p>Prijavljen si kot <strong>{user.name}</strong> ({user.email})</p>
 
-      <h2>Dodaj nov tečaj</h2>
-      <form
-        onSubmit={handleCreateCourse}
-        style={{ display: "flex", flexDirection: "column", maxWidth: "400px", gap: "8px" }}
-      >
-        <input
-          type="text"
-          placeholder="Naslov tečaja"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <textarea
-          placeholder="Opis tečaja (neobvezno)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <button type="submit">Ustvari tečaj</button>
-      </form>
+        <h2 className="mt-4 font-semibold">Dodaj nov tečaj</h2>
+        <form onSubmit={handleCreateCourse} className="flex flex-col max-w-lg gap-3">
+          <input className="p-2 rounded bg-slate-700" type="text" placeholder="Naslov tečaja" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <textarea className="p-2 rounded bg-slate-700" placeholder="Opis tečaja (neobvezno)" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <Button type="submit">Ustvari tečaj</Button>
+        </form>
 
-      {message && <p style={{ marginTop: "10px" }}>{message}</p>}
+        {message && <p className="mt-3">{message}</p>}
 
-      <h2 style={{ marginTop: "20px" }}>Seznam tečajev</h2>
-      {courses.length === 0 ? (
-        <p>Ni še nobenega tečaja.</p>
-      ) : (
-        <ul>
-          {courses.map((course) => (
-            <li key={course.id} style={{ marginBottom: "10px" }}>
-              <strong>{course.title}</strong>{" "}
-              {course.description && <span>- {course.description}</span>}
-              <br />
-              <small>
-                ID: {course.id}, Owner: {course.owner_user_id}
-              </small>
-              <br />
-              <button onClick={() => handleDeleteCourse(course.id)}>Delete</button>
-            </li>
-          ))}
-        </ul>
-      )}
+        <h2 className="mt-6 font-semibold">Seznam tečajev</h2>
+        {courses.length === 0 ? (
+          <p>Ni še nobenega tečaja.</p>
+        ) : (
+          <ul>
+            {courses.map((course) => (
+              <li key={course.id} className="mb-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <strong>{course.title}</strong>{" "}
+                    {course.description && <span>- {course.description}</span>}
+                    <div className="text-sm text-slate-400">ID: {course.id}, Owner: {course.owner_user_id}</div>
+                  </div>
+                  <div>
+                    <Button variant="danger" onClick={() => handleDeleteCourse(course.id)}>Delete</Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }
