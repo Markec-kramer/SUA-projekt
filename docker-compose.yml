@@ -1,0 +1,95 @@
+services:
+  user-db:
+    image: postgres:16-alpine
+    container_name: user-db
+    environment:
+      POSTGRES_USER: user_service
+      POSTGRES_PASSWORD: user_password
+      POSTGRES_DB: user_db
+    ports:
+      - "5433:5432"  # host 5433 -> container 5432
+    volumes:
+      - user_db_data:/var/lib/postgresql/data
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: user-db
+      DB_PORT: 5432
+      DB_USER: user_service
+      DB_PASSWORD: user_password
+      DB_NAME: user_db
+      PORT: 4001
+    depends_on:
+      - user-db
+    ports:
+      - "4001:4001"
+
+  course-db:
+    image: postgres:16-alpine
+    container_name: course-db
+    environment:
+      POSTGRES_USER: course_service
+      POSTGRES_PASSWORD: course_password
+      POSTGRES_DB: course_db
+    ports:
+      - "5434:5432"  # host 5434 -> container 5432
+    volumes:
+      - course_db_data:/var/lib/postgresql/data
+
+  course-service:
+    build: ./course-service
+    container_name: course-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: course-db
+      DB_PORT: 5432
+      DB_USER: course_service
+      DB_PASSWORD: course_password
+      DB_NAME: course_db
+      PORT: 4002
+      USER_SERVICE_URL: http://user-service:4001
+    depends_on:
+      - course-db
+      - user-service
+    ports:
+      - "4002:4002"
+
+  planner-db:
+    image: postgres:16-alpine
+    container_name: planner-db
+    environment:
+      POSTGRES_USER: planner_service
+      POSTGRES_PASSWORD: planner_password
+      POSTGRES_DB: planner_db
+    ports:
+      - "5435:5432"  # host 5435 -> container 5432
+    volumes:
+      - planner_db_data:/var/lib/postgresql/data
+
+  planner-service:
+    build: ./planner-service
+    container_name: planner-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: planner-db
+      DB_PORT: 5432
+      DB_USER: planner_service
+      DB_PASSWORD: planner_password
+      DB_NAME: planner_db
+      PORT: 4003
+      USER_SERVICE_URL: http://user-service:4001
+      COURSE_SERVICE_URL: http://course-service:4002
+    depends_on:
+      - planner-db
+      - user-service
+      - course-service
+    ports:
+      - "4003:4003"
+
+volumes:
+  user_db_data:
+  course_db_data:
+  planner_db_data:

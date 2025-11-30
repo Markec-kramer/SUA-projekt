@@ -1,35 +1,52 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Routes, Route, Link, useNavigate } from "react-router-dom";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import HomePage from "./pages/HomePage";
+import CoursesPage from "./pages/CoursesPage";
+import PlannerPage from "./pages/PlannerPage";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const navigate = useNavigate();
+  const user = localStorage.getItem("user");
+
+  function handleLogout() {
+    localStorage.removeItem("user");
+    navigate("/login");
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div>
+      <nav style={{ padding: "10px", borderBottom: "1px solid #ccc" }}>
+        <Link to="/" style={{ marginRight: "10px" }}>Home</Link>
+        <Link to="/courses" style={{ marginRight: "10px" }}>Courses</Link>
+        <Link to="/planner" style={{ marginRight: "10px" }}>Planner</Link>
+
+        {!user ? (
+          <>
+            <Link to="/login" style={{ marginRight: "10px" }}>Login</Link>
+            <Link to="/register">Register</Link>
+          </>
+        ) : (
+          <button 
+            onClick={handleLogout} 
+            style={{ marginLeft: "20px", padding: "5px 10px" }}
+          >
+            Logout
+          </button>
+        )}
+      </nav>
+
+      <div style={{ padding: "20px" }}>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/courses" element={<CoursesPage />} />
+          <Route path="/planner" element={<PlannerPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Routes>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;
