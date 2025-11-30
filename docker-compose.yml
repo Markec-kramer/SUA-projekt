@@ -89,7 +89,32 @@ services:
     ports:
       - "4003:4003"
 
+  weather-db:
+    image: redis:7-alpine
+    container_name: weather-db
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - weather_db_data:/data
+
+  weather-service:
+    build: ./weather-service
+    container_name: weather-service
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: weather-db
+      REDIS_PORT: 6379
+      PORT: 4004
+      DEFAULT_TTL: 3600
+    depends_on:
+      - weather-db
+    ports:
+      - "4004:4004"
+
+
 volumes:
   user_db_data:
   course_db_data:
   planner_db_data:
+  weather_db_data:

@@ -4,6 +4,7 @@ import RegisterPage from "./pages/RegisterPage";
 import HomePage from "./pages/HomePage";
 import CoursesPage from "./pages/CoursesPage";
 import PlannerPage from "./pages/PlannerPage";
+import WeatherPage from "./pages/WeatherPage";
 
 function App() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ function App() {
         <Link to="/" style={{ marginRight: "10px" }}>Home</Link>
         <Link to="/courses" style={{ marginRight: "10px" }}>Courses</Link>
         <Link to="/planner" style={{ marginRight: "10px" }}>Planner</Link>
+        <Link to="/weather" style={{ marginRight: "10px" }}>Weather</Link>
 
         {!user ? (
           <>
@@ -41,6 +43,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/planner" element={<PlannerPage />} />
+          <Route path="/weather" element={<WeatherPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Routes>
