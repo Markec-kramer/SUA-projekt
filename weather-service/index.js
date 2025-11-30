@@ -80,7 +80,73 @@ app.get('/weather/:city', async (req, res) => {
   }
 });
 
-// Put weather for city
+// List all cached weather entries (GET /weather)
+app.get('/weather', async (req, res) => {
+  try {
+    const keys = await redis.keys('weather:*');
+    if (!keys || keys.length === 0) return res.json([]);
+    const values = await redis.mget(...keys);
+    const results = [];
+    for (let i = 0; i < keys.length; i++) {
+      const raw = values[i];
+      if (!raw) continue;
+      const obj = JSON.parse(raw);
+      const ttlSeconds = await redis.ttl(keys[i]);
+      let expiresAt = null;
+      if (ttlSeconds > 0) expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+      results.push({ ...obj, source: 'cache', ttl: ttlSeconds >= 0 ? ttlSeconds : null, expiresAt });
+    }
+    return res.json(results);
+  } catch (err) {
+    console.error('LIST error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// POST /weather - create a weather entry (body: { city, tempC, conditions, ttl? })
+app.post('/weather', async (req, res) => {
+  const { city, tempC, conditions, ttl } = req.body || {};
+  if (!city || typeof tempC !== 'number' || typeof conditions !== 'string') {
+    return res.status(400).json({ error: 'invalid_input', message: 'city, tempC(number) and conditions(string) are required' });
+  }
+  const key = `weather:${city.toLowerCase()}`;
+  const now = new Date().toISOString();
+  const value = { city: city.toLowerCase(), tempC, conditions, timestamp: now };
+  const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
+  try {
+    if (appliedTtl > 0) await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
+    else await redis.set(key, JSON.stringify(value));
+    return res.status(201).json({ city: value.city, ttl: appliedTtl, timestamp: now });
+  } catch (err) {
+    console.error('POST error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// POST /weather/bulk - create multiple entries (body: [{city,tempC,conditions,ttl?}, ...])
+app.post('/weather/bulk', async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.status(400).json({ error: 'invalid_input', message: 'Expecting array in request body' });
+  const results = [];
+  for (const it of items) {
+    const { city, tempC, conditions, ttl } = it;
+    if (!city || typeof tempC !== 'number' || typeof conditions !== 'string') continue;
+    const key = `weather:${city.toLowerCase()}`;
+    const now = new Date().toISOString();
+    const value = { city: city.toLowerCase(), tempC, conditions, timestamp: now };
+    const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
+    try {
+      if (appliedTtl > 0) await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
+      else await redis.set(key, JSON.stringify(value));
+      results.push({ city: value.city, ttl: appliedTtl, timestamp: now });
+    } catch (err) {
+      console.error('BULK POST error', key, err);
+    }
+  }
+  return res.status(201).json(results);
+});
+
+// PUT /weather/:city - update/create single (existing behavior)
 app.put('/weather/:city', async (req, res) => {
   const city = req.params.city.toLowerCase();
   const key = `weather:${city}`;
@@ -92,7 +158,11 @@ app.put('/weather/:city', async (req, res) => {
   const now = new Date().toISOString();
   const value = { city, tempC, conditions, timestamp: now };
   try {
-    await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
+    if (appliedTtl > 0) {
+      await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
+    } else {
+      await redis.set(key, JSON.stringify(value));
+    }
     return res.status(201).json({ city, ttl: appliedTtl, timestamp: now });
   } catch (err) {
     console.error('PUT error', err);
@@ -100,7 +170,30 @@ app.put('/weather/:city', async (req, res) => {
   }
 });
 
-// Delete
+// PUT /weather/bulk - update multiple entries (body: array like POST /weather/bulk)
+app.put('/weather/bulk', async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.status(400).json({ error: 'invalid_input', message: 'Expecting array in request body' });
+  const results = [];
+  for (const it of items) {
+    const { city, tempC, conditions, ttl } = it;
+    if (!city || typeof tempC !== 'number' || typeof conditions !== 'string') continue;
+    const key = `weather:${city.toLowerCase()}`;
+    const now = new Date().toISOString();
+    const value = { city: city.toLowerCase(), tempC, conditions, timestamp: now };
+    const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
+    try {
+      if (appliedTtl > 0) await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
+      else await redis.set(key, JSON.stringify(value));
+      results.push({ city: value.city, ttl: appliedTtl, timestamp: now });
+    } catch (err) {
+      console.error('BULK PUT error', key, err);
+    }
+  }
+  return res.status(200).json(results);
+});
+
+// Delete single city
 app.delete('/weather/:city', async (req, res) => {
   const city = req.params.city.toLowerCase();
   const key = `weather:${city}`;
@@ -110,6 +203,27 @@ app.delete('/weather/:city', async (req, res) => {
     return res.status(204).send();
   } catch (err) {
     console.error('DELETE error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// DELETE /weather - bulk delete by cities array in body or delete all if ?all=1
+app.delete('/weather', async (req, res) => {
+  const { cities } = req.body || {};
+  const deleteAll = req.query.all === '1';
+  try {
+    if (deleteAll) {
+      const keys = await redis.keys('weather:*');
+      if (keys.length === 0) return res.status(204).send();
+      await redis.del(...keys);
+      return res.status(204).send();
+    }
+    if (!Array.isArray(cities) || cities.length === 0) return res.status(400).json({ error: 'invalid_input', message: 'Provide cities array in body or use ?all=1' });
+    const keys = cities.map((c) => `weather:${String(c).toLowerCase()}`);
+    await redis.del(...keys);
+    return res.status(204).send();
+  } catch (err) {
+    console.error('BULK DELETE error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
 });

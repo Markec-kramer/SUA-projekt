@@ -91,12 +91,30 @@ app.get('/recommendations/:userId', async (req, res) => {
   }
 });
 
-// Create a recommendation for user
-app.post('/recommendations/:userId', async (req, res) => {
-  const userId = req.params.userId;
-  const { courseId, score, reason, ttl } = req.body || {};
-  if (typeof courseId !== 'number') {
-    return res.status(400).json({ error: 'invalid_input', message: 'courseId must be a number' });
+// Get single recommendation by user and id
+app.get('/recommendations/:userId/:id', async (req, res) => {
+  const { userId, id } = req.params;
+  const key = `rec:${userId}:${id}`;
+  try {
+    const raw = await redis.get(key);
+    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    const obj = JSON.parse(raw);
+    // attach ttl if present
+    const ttlSeconds = await redis.ttl(key);
+    obj.ttl = ttlSeconds >= 0 ? ttlSeconds : null;
+    obj.expiresAt = ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
+    res.json(obj);
+  } catch (err) {
+    console.error('GET rec by id error', err);
+    res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// POST /recommendations - create by body { userId, courseId, score?, reason?, ttl? }
+app.post('/recommendations', async (req, res) => {
+  const { userId, courseId, score, reason, ttl } = req.body || {};
+  if (!userId || typeof courseId !== 'number') {
+    return res.status(400).json({ error: 'invalid_input', message: 'userId and courseId required (courseId:number)' });
   }
   const id = uuidv4();
   const key = `rec:${userId}:${id}`;
@@ -104,29 +122,106 @@ app.post('/recommendations/:userId', async (req, res) => {
   const val = { id, userId, courseId, score: typeof score === 'number' ? score : null, reason: reason || null, createdAt: now };
   const appliedTtl = Number.isInteger(ttl) && ttl > 0 ? ttl : DEFAULT_TTL;
   try {
-    if (appliedTtl > 0) {
-      await redis.set(key, JSON.stringify(val), 'EX', appliedTtl);
-    } else {
-      await redis.set(key, JSON.stringify(val));
-    }
-    res.status(201).json({ ...val, ttl: appliedTtl });
+    if (appliedTtl > 0) await redis.set(key, JSON.stringify(val), 'EX', appliedTtl);
+    else await redis.set(key, JSON.stringify(val));
+    return res.status(201).json({ ...val, ttl: appliedTtl });
   } catch (err) {
-    console.error('CREATE error', err);
-    res.status(500).json({ error: 'server_error', message: err.message });
+    console.error('POST create rec error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
   }
 });
 
-// Delete all recommendations for a user
-app.delete('/recommendations/:userId', async (req, res) => {
-  const userId = req.params.userId;
+// Helper: find key by id (search rec:*:id)
+async function findKeyById(id) {
+  const keys = await redis.keys(`rec:*:${id}`);
+  return (keys && keys.length) ? keys[0] : null;
+}
+
+// PUT /recommendations/:userId/:id - update specific recommendation
+app.put('/recommendations/:userId/:id', async (req, res) => {
+  const { userId, id } = req.params;
+  const { courseId, score, reason, ttl } = req.body || {};
+  const key = `rec:${userId}:${id}`;
   try {
-    const keys = await redis.keys(`rec:${userId}:*`);
-    if (!keys || keys.length === 0) return res.status(404).json({ error: 'not_found', message: 'no recommendations' });
-    await redis.del(...keys);
-    res.status(204).send();
+    const raw = await redis.get(key);
+    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    const obj = JSON.parse(raw);
+    const updated = {
+      ...obj,
+      courseId: typeof courseId === 'number' ? courseId : obj.courseId,
+      score: typeof score === 'number' ? score : obj.score,
+      reason: typeof reason === 'string' ? reason : obj.reason,
+      createdAt: obj.createdAt || new Date().toISOString(),
+    };
+    const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
+    if (appliedTtl > 0) await redis.set(key, JSON.stringify(updated), 'EX', appliedTtl);
+    else await redis.set(key, JSON.stringify(updated));
+    return res.json({ ...updated, ttl: appliedTtl });
   } catch (err) {
-    console.error('DELETE error', err);
-    res.status(500).json({ error: 'server_error', message: err.message });
+    console.error('PUT update rec error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// PUT /recommendations/:id - update by id (search across users)
+app.put('/recommendations/id/:id', async (req, res) => {
+  const { id } = req.params;
+  const { courseId, score, reason, ttl } = req.body || {};
+  try {
+    const key = await findKeyById(id);
+    if (!key) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    const raw = await redis.get(key);
+    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    const obj = JSON.parse(raw);
+    const updated = {
+      ...obj,
+      courseId: typeof courseId === 'number' ? courseId : obj.courseId,
+      score: typeof score === 'number' ? score : obj.score,
+      reason: typeof reason === 'string' ? reason : obj.reason,
+      createdAt: obj.createdAt || new Date().toISOString(),
+    };
+    const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
+    if (appliedTtl > 0) await redis.set(key, JSON.stringify(updated), 'EX', appliedTtl);
+    else await redis.set(key, JSON.stringify(updated));
+    return res.json({ ...updated, ttl: appliedTtl });
+  } catch (err) {
+    console.error('PUT update by id error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// DELETE /recommendations/:userId/:id - delete single recommendation
+app.delete('/recommendations/:userId/:id', async (req, res) => {
+  const { userId, id } = req.params;
+  const key = `rec:${userId}:${id}`;
+  try {
+    const removed = await redis.del(key);
+    if (removed === 0) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    return res.status(204).send();
+  } catch (err) {
+    console.error('DELETE single rec error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// DELETE /recommendations - bulk delete by body.ids = [{userId,id}] or ?all=1
+app.delete('/recommendations', async (req, res) => {
+  const deleteAll = req.query.all === '1';
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  try {
+    if (deleteAll) {
+      const keys = await redis.keys('rec:*');
+      if (!keys || keys.length === 0) return res.status(204).send();
+      await redis.del(...keys);
+      return res.status(204).send();
+    }
+    if (!ids.length) return res.status(400).json({ error: 'invalid_input', message: 'Provide ids array in body or use ?all=1' });
+    const keys = ids.map((it) => `rec:${it.userId}:${it.id}`);
+    await redis.del(...keys);
+    return res.status(204).send();
+  } catch (err) {
+    console.error('BULK DELETE recs error', err);
+    return res.status(500).json({ error: 'server_error', message: err.message });
   }
 });
 
