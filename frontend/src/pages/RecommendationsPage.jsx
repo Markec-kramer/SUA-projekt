@@ -5,6 +5,9 @@ import Button from "../components/Button";
 const RECO_API_URL = "http://localhost:4005";
 
 export default function RecommendationsPage() {
+  const storedUser = localStorage.getItem("user");
+  const user = storedUser ? JSON.parse(storedUser) : null;
+
   const [userId, setUserId] = useState("");
   const [recs, setRecs] = useState([]);
   const [allRecs, setAllRecs] = useState([]);
@@ -23,12 +26,14 @@ export default function RecommendationsPage() {
   const [updateScore, setUpdateScore] = useState("");
   const [updateReason, setUpdateReason] = useState("");
   const [updateTtl, setUpdateTtl] = useState("");
-  const [bulkDeleteInput, setBulkDeleteInput] = useState('[{"userId":"1","id":"seed-1-101"}]');
+  const [bulkDeleteInput, setBulkDeleteInput] = useState(
+    '[{"userId":"1","id":"seed-1-101"}]',
+  );
   const [message, setMessage] = useState("");
 
   // list recommendations; optional userIdParam overrides the current input
   async function handleList(e, userIdParam) {
-    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     setMessage("");
     setRecs([]);
     const target = userIdParam ?? userId;
@@ -37,7 +42,9 @@ export default function RecommendationsPage() {
       return;
     }
     try {
-      const res = await fetch(`${RECO_API_URL}/recommendations/${encodeURIComponent(target)}`);
+      const res = await fetch(
+        `${RECO_API_URL}/recommendations/${encodeURIComponent(target)}`,
+      );
       if (res.status === 404) {
         setMessage("No recommendations for that user.");
         return;
@@ -67,11 +74,14 @@ export default function RecommendationsPage() {
     if (reason) body.reason = reason;
     if (ttl) body.ttl = Number(ttl);
     try {
-      const res = await fetch(`${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage(data.message || "Error creating recommendation");
@@ -97,9 +107,12 @@ export default function RecommendationsPage() {
       return;
     }
     try {
-      const res = await fetch(`${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (res.status === 404) {
         setMessage("No recommendations to delete for that user.");
         return;
@@ -123,14 +136,14 @@ export default function RecommendationsPage() {
     try {
       const res = await fetch(`${RECO_API_URL}/recommendations`);
       if (!res.ok) {
-        setMessage('Error listing recommendations');
+        setMessage("Error listing recommendations");
         return;
       }
       const data = await res.json();
       setAllRecs(data);
     } catch (err) {
       console.error(err);
-      setMessage('Could not reach recommendation service');
+      setMessage("Could not reach recommendation service");
     }
   }
 
@@ -138,25 +151,27 @@ export default function RecommendationsPage() {
   async function handleGetById() {
     setMessage("");
     if (!userId || !singleId) {
-      setMessage('Provide userId and id');
+      setMessage("Provide userId and id");
       return;
     }
     try {
-      const res = await fetch(`${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}/${encodeURIComponent(singleId)}`);
+      const res = await fetch(
+        `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}/${encodeURIComponent(singleId)}`,
+      );
       if (res.status === 404) {
-        setMessage('Not found');
+        setMessage("Not found");
         return;
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setMessage(err.message || 'Error fetching');
+        setMessage(err.message || "Error fetching");
         return;
       }
       const data = await res.json();
       setRecs([data]);
     } catch (err) {
       console.error(err);
-      setMessage('Could not reach recommendation service');
+      setMessage("Could not reach recommendation service");
     }
   }
 
@@ -164,7 +179,7 @@ export default function RecommendationsPage() {
   async function handlePostGeneric() {
     setMessage("");
     if (!postUserId || postCourseId === "") {
-      setMessage('userId and courseId required');
+      setMessage("userId and courseId required");
       return;
     }
     try {
@@ -173,19 +188,19 @@ export default function RecommendationsPage() {
       if (postReason) body.reason = postReason;
       if (postTtl) body.ttl = Number(postTtl);
       const res = await fetch(`${RECO_API_URL}/recommendations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(data.message || 'Error creating recommendation');
+        setMessage(data.message || "Error creating recommendation");
         return;
       }
       setMessage(`Created ${data.id}`);
     } catch (err) {
       console.error(err);
-      setMessage('Could not reach recommendation service');
+      setMessage("Could not reach recommendation service");
     }
   }
 
@@ -193,7 +208,7 @@ export default function RecommendationsPage() {
   async function handlePutById() {
     setMessage("");
     if (!updateId) {
-      setMessage('Provide id to update');
+      setMessage("Provide id to update");
       return;
     }
     try {
@@ -202,20 +217,23 @@ export default function RecommendationsPage() {
       if (updateScore) body.score = Number(updateScore);
       if (updateReason) body.reason = updateReason;
       if (updateTtl) body.ttl = Number(updateTtl);
-      const res = await fetch(`${RECO_API_URL}/recommendations/id/${encodeURIComponent(updateId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `${RECO_API_URL}/recommendations/id/${encodeURIComponent(updateId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(data.message || 'Error updating');
+        setMessage(data.message || "Error updating");
         return;
       }
       setMessage(`Updated ${data.id}`);
     } catch (err) {
       console.error(err);
-      setMessage('Could not reach recommendation service');
+      setMessage("Could not reach recommendation service");
     }
   }
 
@@ -224,31 +242,45 @@ export default function RecommendationsPage() {
     setMessage("");
     try {
       if (all) {
-        const res = await fetch(`${RECO_API_URL}/recommendations?all=1`, { method: 'DELETE' });
+        const res = await fetch(`${RECO_API_URL}/recommendations?all=1`, {
+          method: "DELETE",
+        });
         if (!res.ok && res.status !== 204) {
           const data = await res.json().catch(() => ({}));
-          setMessage(data.message || 'Error deleting all');
+          setMessage(data.message || "Error deleting all");
           return;
         }
-        setMessage('Deleted all recommendations');
+        setMessage("Deleted all recommendations");
         return;
       }
       const ids = JSON.parse(bulkDeleteInput);
       const res = await fetch(`${RECO_API_URL}/recommendations`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       });
       if (!res.ok && res.status !== 204) {
         const data = await res.json().catch(() => ({}));
-        setMessage(data.message || 'Error bulk delete');
+        setMessage(data.message || "Error bulk delete");
         return;
       }
-      setMessage('Deleted specified recommendations');
+      setMessage("Deleted specified recommendations");
     } catch (err) {
       console.error(err);
-      setMessage('Invalid JSON or request failed');
+      setMessage("Invalid JSON or request failed");
     }
+  }
+
+  // If user is not logged, we render a small message in the UI below; do not return early (hooks must run)
+  if (!user) {
+    return (
+      <div>
+        <h1 className="text-2xl font-bold mb-4">Courses</h1>
+        <Card>
+          <p>Dostop dovoljen samo prijavljenim uporabnikom.</p>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -258,21 +290,36 @@ export default function RecommendationsPage() {
         <p>View and manage course recommendations for a user.</p>
 
         <div className="my-3">
-          <form className="flex gap-3 items-center" onSubmit={(e) => e.preventDefault()}>
-            <input className="p-2 rounded bg-slate-700" placeholder="userId" value={userId} onChange={(e) => setUserId(e.target.value)} />
+          <form
+            className="flex gap-3 items-center"
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="userId"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+            />
             <Button onClick={(e) => handleList(e)}>List</Button>
-            <Button variant="danger" onClick={handleDelete}>Delete all</Button>
+            <Button variant="danger" onClick={handleDelete}>
+              Delete all
+            </Button>
           </form>
           <div className="mt-3">
             <h4 className="font-semibold">Advanced</h4>
             <div className="flex gap-3 items-center mt-2">
               <Button onClick={handleListAll}>List all</Button>
-              <Button variant="ghost" onClick={() => setAllRecs([])}>Clear all list</Button>
+              <Button variant="ghost" onClick={() => setAllRecs([])}>
+                Clear all list
+              </Button>
             </div>
             {allRecs.length > 0 && (
               <ul className="mt-2 space-y-2">
                 {allRecs.map((r) => (
-                  <li key={r.id} className="p-2 bg-slate-700 rounded">{r.userId}:{r.id} — course {r.courseId} — score: {r.score ?? 'n/a'}</li>
+                  <li key={r.id} className="p-2 bg-slate-700 rounded">
+                    {r.userId}:{r.id} — course {r.courseId} — score:{" "}
+                    {r.score ?? "n/a"}
+                  </li>
                 ))}
               </ul>
             )}
@@ -281,11 +328,40 @@ export default function RecommendationsPage() {
 
         <h2 className="font-semibold">Create recommendation</h2>
         <form onSubmit={handleCreate} className="flex flex-col max-w-md gap-3">
-          <input className="p-2 rounded bg-slate-700" placeholder="userId" value={userId} onChange={(e) => setUserId(e.target.value)} />
-          <input className="p-2 rounded bg-slate-700" type="number" placeholder="courseId" value={courseId} onChange={(e) => setCourseId(e.target.value)} />
-          <input className="p-2 rounded bg-slate-700" type="number" step="0.01" placeholder="score (0-1)" value={score} onChange={(e) => setScore(e.target.value)} />
-          <input className="p-2 rounded bg-slate-700" placeholder="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <input className="p-2 rounded bg-slate-700" type="number" placeholder="ttl (seconds, optional)" value={ttl} onChange={(e) => setTtl(e.target.value)} />
+          <input
+            className="p-2 rounded bg-slate-700"
+            placeholder="userId"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+          />
+          <input
+            className="p-2 rounded bg-slate-700"
+            type="number"
+            placeholder="courseId"
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+          />
+          <input
+            className="p-2 rounded bg-slate-700"
+            type="number"
+            step="0.01"
+            placeholder="score (0-1)"
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+          />
+          <input
+            className="p-2 rounded bg-slate-700"
+            placeholder="reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <input
+            className="p-2 rounded bg-slate-700"
+            type="number"
+            placeholder="ttl (seconds, optional)"
+            value={ttl}
+            onChange={(e) => setTtl(e.target.value)}
+          />
           <Button type="submit">Create</Button>
         </form>
 
@@ -294,11 +370,36 @@ export default function RecommendationsPage() {
         <div className="mt-6">
           <h3 className="font-semibold">Create (generic)</h3>
           <div className="flex gap-2 mt-2">
-            <input className="p-2 rounded bg-slate-700" placeholder="userId" value={postUserId} onChange={(e) => setPostUserId(e.target.value)} />
-            <input className="p-2 rounded bg-slate-700" placeholder="courseId" value={postCourseId} onChange={(e) => setPostCourseId(e.target.value)} />
-            <input className="p-2 rounded bg-slate-700" placeholder="score" value={postScore} onChange={(e) => setPostScore(e.target.value)} />
-            <input className="p-2 rounded bg-slate-700" placeholder="reason" value={postReason} onChange={(e) => setPostReason(e.target.value)} />
-            <input className="p-2 rounded bg-slate-700" placeholder="ttl" value={postTtl} onChange={(e) => setPostTtl(e.target.value)} />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="userId"
+              value={postUserId}
+              onChange={(e) => setPostUserId(e.target.value)}
+            />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="courseId"
+              value={postCourseId}
+              onChange={(e) => setPostCourseId(e.target.value)}
+            />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="score"
+              value={postScore}
+              onChange={(e) => setPostScore(e.target.value)}
+            />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="reason"
+              value={postReason}
+              onChange={(e) => setPostReason(e.target.value)}
+            />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="ttl"
+              value={postTtl}
+              onChange={(e) => setPostTtl(e.target.value)}
+            />
             <Button onClick={handlePostGeneric}>POST</Button>
           </div>
         </div>
@@ -306,18 +407,48 @@ export default function RecommendationsPage() {
         <div className="mt-6">
           <h3 className="font-semibold">Get / Update by ID</h3>
           <div className="flex gap-2 items-center mt-2">
-            <input className="p-2 rounded bg-slate-700" placeholder="id" value={singleId} onChange={(e) => setSingleId(e.target.value)} />
+            <input
+              className="p-2 rounded bg-slate-700"
+              placeholder="id"
+              value={singleId}
+              onChange={(e) => setSingleId(e.target.value)}
+            />
             <Button onClick={handleGetById}>Get by id</Button>
           </div>
 
           <div className="mt-3">
             <h4 className="font-medium">Update by id</h4>
             <div className="flex gap-2 mt-2">
-              <input className="p-2 rounded bg-slate-700" placeholder="id" value={updateId} onChange={(e) => setUpdateId(e.target.value)} />
-              <input className="p-2 rounded bg-slate-700" placeholder="courseId" value={updateCourseId} onChange={(e) => setUpdateCourseId(e.target.value)} />
-              <input className="p-2 rounded bg-slate-700" placeholder="score" value={updateScore} onChange={(e) => setUpdateScore(e.target.value)} />
-              <input className="p-2 rounded bg-slate-700" placeholder="reason" value={updateReason} onChange={(e) => setUpdateReason(e.target.value)} />
-              <input className="p-2 rounded bg-slate-700" placeholder="ttl" value={updateTtl} onChange={(e) => setUpdateTtl(e.target.value)} />
+              <input
+                className="p-2 rounded bg-slate-700"
+                placeholder="id"
+                value={updateId}
+                onChange={(e) => setUpdateId(e.target.value)}
+              />
+              <input
+                className="p-2 rounded bg-slate-700"
+                placeholder="courseId"
+                value={updateCourseId}
+                onChange={(e) => setUpdateCourseId(e.target.value)}
+              />
+              <input
+                className="p-2 rounded bg-slate-700"
+                placeholder="score"
+                value={updateScore}
+                onChange={(e) => setUpdateScore(e.target.value)}
+              />
+              <input
+                className="p-2 rounded bg-slate-700"
+                placeholder="reason"
+                value={updateReason}
+                onChange={(e) => setUpdateReason(e.target.value)}
+              />
+              <input
+                className="p-2 rounded bg-slate-700"
+                placeholder="ttl"
+                value={updateTtl}
+                onChange={(e) => setUpdateTtl(e.target.value)}
+              />
               <Button onClick={handlePutById}>PUT by id</Button>
             </div>
           </div>
@@ -325,11 +456,22 @@ export default function RecommendationsPage() {
 
         <div className="mt-6">
           <h3 className="font-semibold">Bulk Delete</h3>
-          <label className="block text-sm mt-2">IDs JSON (array of {`{userId,id}`})</label>
-          <textarea className="w-full p-2 rounded bg-slate-800" rows={3} value={bulkDeleteInput} onChange={(e) => setBulkDeleteInput(e.target.value)} />
+          <label className="block text-sm mt-2">
+            IDs JSON (array of {`{userId,id}`})
+          </label>
+          <textarea
+            className="w-full p-2 rounded bg-slate-800"
+            rows={3}
+            value={bulkDeleteInput}
+            onChange={(e) => setBulkDeleteInput(e.target.value)}
+          />
           <div className="flex gap-3 mt-2">
-            <Button variant="danger" onClick={() => handleBulkDelete(false)}>Delete listed</Button>
-            <Button variant="danger" onClick={() => handleBulkDelete(true)}>Delete all</Button>
+            <Button variant="danger" onClick={() => handleBulkDelete(false)}>
+              Delete listed
+            </Button>
+            <Button variant="danger" onClick={() => handleBulkDelete(true)}>
+              Delete all
+            </Button>
           </div>
         </div>
 
@@ -341,9 +483,13 @@ export default function RecommendationsPage() {
             {recs.map((r) => (
               <li key={r.id} className="mb-4">
                 <div>
-                  <strong>Course {r.courseId}</strong> (score: {r.score ?? 'n/a'})<br />
-                  Reason: {r.reason ?? 'n/a'}<br />
-                  <small className="text-slate-400">CreatedAt: {r.createdAt}</small>
+                  <strong>Course {r.courseId}</strong> (score:{" "}
+                  {r.score ?? "n/a"})<br />
+                  Reason: {r.reason ?? "n/a"}
+                  <br />
+                  <small className="text-slate-400">
+                    CreatedAt: {r.createdAt}
+                  </small>
                 </div>
               </li>
             ))}
