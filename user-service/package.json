@@ -12,5 +12,7 @@
     "swagger-ui-express": "^4.6.3",
     "swagger-jsdoc": "^6.2.8",
     "js-yaml": "^4.1.0"
+    "jsonwebtoken": "^9.0.0",
+    "cookie-parser": "^1.4.6"
   }
 }

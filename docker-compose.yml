@@ -23,10 +23,15 @@ services:
       DB_NAME: user_db
       PORT: 4001
       SWAGGER_ENABLED: "1"
+      JWT_SECRET: dev_secret
+      JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
+      JWT_PRIVATE_KEY_PATH: /app/auth/private.pem
     depends_on:
       - user-db
     ports:
       - "4001:4001"
+    volumes:
+      - ./auth:/app/auth:ro
 
   course-db:
     image: postgres:16-alpine
@@ -53,11 +58,15 @@ services:
       PORT: 4002
       USER_SERVICE_URL: http://user-service:4001
       SWAGGER_ENABLED: "1"
+      JWT_SECRET: dev_secret
+      JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
     depends_on:
       - course-db
       - user-service
     ports:
       - "4002:4002"
+    volumes:
+      - ./auth:/app/auth:ro
 
   planner-db:
     image: postgres:16-alpine
@@ -85,12 +94,16 @@ services:
       USER_SERVICE_URL: http://user-service:4001
       COURSE_SERVICE_URL: http://course-service:4002
       SWAGGER_ENABLED: "1"
+      JWT_SECRET: dev_secret
+      JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
     depends_on:
       - planner-db
       - user-service
       - course-service
     ports:
       - "4003:4003"
+    volumes:
+      - ./auth:/app/auth:ro
 
   weather-db:
     image: redis:7-alpine
@@ -111,10 +124,14 @@ services:
       PORT: 4004
       DEFAULT_TTL: 3600
       SWAGGER_ENABLED: "1"
+      JWT_SECRET: dev_secret
+      JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
     depends_on:
       - weather-db
     ports:
       - "4004:4004"
+    volumes:
+      - ./auth:/app/auth:ro
 
   recommendation-db:
     image: redis:7-alpine
@@ -136,10 +153,14 @@ services:
       DEFAULT_TTL: 86400
       CORS_ORIGIN: '*'
       SWAGGER_ENABLED: "1"
+      JWT_SECRET: dev_secret
+      JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
     depends_on:
       - recommendation-db
     ports:
       - "4005:4005"
+    volumes:
+      - ./auth:/app/auth:ro
 
 
 volumes:

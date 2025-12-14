@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import { fetchWithAuth } from '../api';
 
 const RECO_API_URL = "http://localhost:4005";
 
@@ -42,7 +43,7 @@ export default function RecommendationsPage() {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${RECO_API_URL}/recommendations/${encodeURIComponent(target)}`,
       );
       if (res.status === 404) {
@@ -74,7 +75,7 @@ export default function RecommendationsPage() {
     if (reason) body.reason = reason;
     if (ttl) body.ttl = Number(ttl);
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`,
         {
           method: "POST",
@@ -107,7 +108,7 @@ export default function RecommendationsPage() {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`,
         {
           method: "DELETE",
@@ -134,7 +135,7 @@ export default function RecommendationsPage() {
   async function handleListAll() {
     setMessage("");
     try {
-      const res = await fetch(`${RECO_API_URL}/recommendations`);
+      const res = await fetchWithAuth(`${RECO_API_URL}/recommendations`);
       if (!res.ok) {
         setMessage("Error listing recommendations");
         return;
@@ -155,7 +156,7 @@ export default function RecommendationsPage() {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}/${encodeURIComponent(singleId)}`,
       );
       if (res.status === 404) {
@@ -187,7 +188,7 @@ export default function RecommendationsPage() {
       if (postScore) body.score = Number(postScore);
       if (postReason) body.reason = postReason;
       if (postTtl) body.ttl = Number(postTtl);
-      const res = await fetch(`${RECO_API_URL}/recommendations`, {
+        const res = await fetchWithAuth(`${RECO_API_URL}/recommendations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -217,14 +218,13 @@ export default function RecommendationsPage() {
       if (updateScore) body.score = Number(updateScore);
       if (updateReason) body.reason = updateReason;
       if (updateTtl) body.ttl = Number(updateTtl);
-      const res = await fetch(
-        `${RECO_API_URL}/recommendations/id/${encodeURIComponent(updateId)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
+        const res = await fetchWithAuth(
+          `${RECO_API_URL}/recommendations/id/${encodeURIComponent(updateId)}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(body),
+          },
+        );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage(data.message || "Error updating");
@@ -242,7 +242,7 @@ export default function RecommendationsPage() {
     setMessage("");
     try {
       if (all) {
-        const res = await fetch(`${RECO_API_URL}/recommendations?all=1`, {
+        const res = await fetchWithAuth(`${RECO_API_URL}/recommendations?all=1`, {
           method: "DELETE",
         });
         if (!res.ok && res.status !== 204) {
@@ -254,9 +254,8 @@ export default function RecommendationsPage() {
         return;
       }
       const ids = JSON.parse(bulkDeleteInput);
-      const res = await fetch(`${RECO_API_URL}/recommendations`, {
+      const res = await fetchWithAuth(`${RECO_API_URL}/recommendations`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       });
       if (!res.ok && res.status !== 204) {
