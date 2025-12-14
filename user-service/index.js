@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+const fs = require('fs');
+const yaml = require('js-yaml');
 const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
@@ -73,6 +75,18 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Swagger (dev only) - load openapi.yaml if present
+if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
+  try {
+    const swaggerUi = require('swagger-ui-express');
+    const specRaw = fs.readFileSync(require('path').join(__dirname, 'openapi.yaml'), 'utf8');
+    const swaggerSpec = yaml.load(specRaw);
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  } catch (err) {
+    console.warn('Swagger openapi.yaml not found or failed to load:', err.message || err);
+  }
+}
+
 // DB pool
 const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
@@ -116,6 +130,15 @@ async function initDb() {
 
 // ===== ENDPOINTI =====
 
+/**
+ * @openapi
+ * /users:
+ *   get:
+ *     summary: List users
+ *     responses:
+ *       200:
+ *         description: array of users
+ */
 // 2x GET
 // 1) seznam userjev
 app.get("/users", authMiddleware, async (req, res) => {

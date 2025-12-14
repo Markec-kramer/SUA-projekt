@@ -2,6 +2,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const Redis = require('ioredis');
 const cors = require('cors');
+const fs = require('fs');
+const yaml = require('js-yaml');
 
 const app = express();
 // Enable CORS - default allow all origins for local development
@@ -39,6 +41,18 @@ const PORT = parseInt(process.env.PORT || '4004', 10);
 const DEFAULT_TTL = parseInt(process.env.DEFAULT_TTL || '3600', 10);
 
 const redis = new Redis({ host: REDIS_HOST, port: REDIS_PORT });
+
+// Swagger (dev only) - load openapi.yaml if present
+if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
+  try {
+    const swaggerUi = require('swagger-ui-express');
+    const specRaw = fs.readFileSync(require('path').join(__dirname, 'openapi.yaml'), 'utf8');
+    const swaggerSpec = yaml.load(specRaw);
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  } catch (err) {
+    console.warn('Swagger openapi.yaml not found or failed to load:', err.message || err);
+  }
+}
 
 // Seed initial data (only sets keys if they don't already exist)
 async function seedInitialData() {
@@ -78,7 +92,21 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
-// Get weather for city
+/**
+ * @openapi
+ * /weather/{city}:
+ *   get:
+ *     summary: Get weather for a city
+ *     parameters:
+ *       - in: path
+ *         name: city
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Weather object
+ */
 app.get('/weather/:city', async (req, res) => {
   const city = req.params.city.toLowerCase();
   const key = `weather:${city}`;

@@ -36,6 +36,26 @@ function authMiddleware(req, res, next) {
 
 app.use(authMiddleware);
 
+// Swagger (dev only)
+if (process.env.SWAGGER_ENABLED === "1" || process.env.NODE_ENV === "development") {
+  const swaggerUi = require("swagger-ui-express");
+  const swaggerJSDoc = require("swagger-jsdoc");
+  const PORT = process.env.PORT || 4002;
+  const swaggerSpec = swaggerJSDoc({
+    definition: {
+      openapi: "3.0.0",
+      info: {
+        title: "course-service",
+        version: "1.0.0",
+        description: "Course service - Dev docs",
+      },
+      servers: [{ url: `http://localhost:${PORT}` }],
+    },
+    apis: [__filename],
+  });
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
+
 // DB pool
 const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
@@ -87,6 +107,15 @@ async function checkUserExists(userId) {
 
 // 2x GET
 // 1) vsi tečaji
+/**
+ * @openapi
+ * /courses:
+ *   get:
+ *     summary: List courses
+ *     responses:
+ *       200:
+ *         description: array of courses
+ */
 app.get("/courses", async (req, res) => {
   try {
     const result = await query(

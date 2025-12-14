@@ -1,8 +1,8 @@
+import os
 from fastapi import FastAPI, HTTPException, Request, Depends
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
-import os
 import psycopg2
 import requests
 from datetime import datetime
@@ -40,7 +40,15 @@ def get_current_user(request: Request):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-app = FastAPI()
+# determine whether to expose docs
+SWAGGER_ENABLED = os.getenv('SWAGGER_ENABLED', '0') == '1' or os.getenv('NODE_ENV') == 'development'
+
+if SWAGGER_ENABLED:
+    app = FastAPI()
+else:
+    # disable built-in docs/openapi when not enabled
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],      

@@ -1,0 +1,149 @@
+openapi: 3.0.0
+info:
+  title: planner-service
+  version: 1.0.0
+  description: Planner service (study sessions). Dev docs.
+servers:
+  - url: http://localhost:4003
+paths:
+  /study-sessions:
+    get:
+      summary: List study sessions
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: array of study sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudySessionOut'
+    post:
+      summary: Create a study session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudySessionIn'
+      responses:
+        '201':
+          description: created
+    delete:
+      summary: Delete sessions (optionally by user)
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: deleted
+  /study-sessions/{session_id}:
+    get:
+      summary: Get a study session by id
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: session
+    put:
+      summary: Update a study session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudySessionIn'
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete a study session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: deleted
+  /study-sessions/{session_id}/complete:
+    post:
+      summary: Mark session complete
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: completed
+  /study-sessions/{session_id}/reschedule:
+    put:
+      summary: Reschedule a session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_start:
+                  type: string
+                new_end:
+                  type: string
+      responses:
+        '200':
+          description: rescheduled
+components:
+  schemas:
+    StudySessionIn:
+      type: object
+      required: [user_id, course_id, title, start_time, end_time]
+      properties:
+        user_id:
+          type: integer
+        course_id:
+          type: integer
+        title:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+    StudySessionOut:
+      allOf:
+        - $ref: '#/components/schemas/StudySessionIn'
+        - type: object
+          properties:
+            id:
+              type: integer
+            status:
+              type: string
+

@@ -40,6 +40,21 @@ const DEFAULT_TTL = parseInt(process.env.DEFAULT_TTL || '86400', 10);
 
 const redis = new Redis({ host: REDIS_HOST, port: REDIS_PORT });
 
+// Swagger (dev only)
+if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
+  const swaggerUi = require('swagger-ui-express');
+  const swaggerJSDoc = require('swagger-jsdoc');
+  const swaggerSpec = swaggerJSDoc({
+    definition: {
+      openapi: '3.0.0',
+      info: { title: 'recommendation-service', version: '1.0.0', description: 'Recommendation service - Dev docs' },
+      servers: [{ url: `http://localhost:${PORT}` }],
+    },
+    apis: [__filename],
+  });
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
+
 // Seed recommendations for local development
 async function seedInitialRecommendations() {
   // deterministic samples: use stable IDs so seeds are idempotent
@@ -77,7 +92,20 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
-// List recommendations (optionally filter by userId)
+/**
+ * @openapi
+ * /recommendations:
+ *   get:
+ *     summary: List recommendations (optionally by userId)
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: array of recommendations
+ */
 app.get('/recommendations', async (req, res) => {
   const userId = req.query.userId;
   try {
@@ -100,7 +128,21 @@ app.get('/recommendations', async (req, res) => {
   }
 });
 
-// Get recommendations for specific user
+/**
+ * @openapi
+ * /recommendations/{userId}:
+ *   get:
+ *     summary: Get recommendations for a user
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: array of recommendations
+ */
 app.get('/recommendations/:userId', async (req, res) => {
   const userId = req.params.userId;
   try {

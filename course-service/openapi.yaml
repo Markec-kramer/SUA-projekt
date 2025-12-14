@@ -1,0 +1,143 @@
+openapi: 3.0.0
+info:
+  title: course-service
+  version: 1.0.0
+  description: Course management service. Dev docs.
+servers:
+  - url: http://localhost:4002
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: ok
+  /courses:
+    get:
+      summary: List courses
+      responses:
+        '200':
+          description: array of courses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Course'
+    post:
+      summary: Create course
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseCreate'
+      responses:
+        '201':
+          description: created
+    delete:
+      summary: Delete all courses
+      responses:
+        '200':
+          description: deleted
+  /courses/{id}:
+    get:
+      summary: Get course by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: course
+    put:
+      summary: Update course
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourseUpdate'
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete a course
+      responses:
+        '200':
+          description: deleted
+  /courses/{id}/duplicate:
+    post:
+      summary: Duplicate a course
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: duplicated
+  /courses/{id}/owner:
+    put:
+      summary: Change course owner
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                owner_user_id:
+                  type: integer
+      responses:
+        '200':
+          description: updated
+components:
+  schemas:
+    Course:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        owner_user_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    CourseCreate:
+      type: object
+      required: [title, owner_user_id]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        owner_user_id:
+          type: integer
+    CourseUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+

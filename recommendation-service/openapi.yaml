@@ -1,0 +1,205 @@
+openapi: 3.0.0
+info:
+  title: recommendation-service
+  version: 1.0.0
+  description: Recommendation microservice backed by Redis. Dev docs.
+servers:
+  - url: http://localhost:4005
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: ok
+  /recommendations:
+    get:
+      summary: List recommendations (optionally filter by userId)
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: array of recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recommendation'
+    post:
+      summary: Create a recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationCreate'
+      responses:
+        '201':
+          description: created
+    delete:
+      summary: Bulk delete recommendations or delete all with ?all=1
+      parameters:
+        - in: query
+          name: all
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      userId:
+                        type: string
+                      id:
+                        type: string
+      responses:
+        '204':
+          description: deleted
+  /recommendations/{userId}:
+    get:
+      summary: Get recommendations for a specific user
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: array of recommendations
+  /recommendations/{userId}/{id}:
+    get:
+      summary: Get specific recommendation by user and id
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: recommendation object
+    put:
+      summary: Update a recommendation (by user and id)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationUpdate'
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete recommendation by user and id
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: deleted
+  /recommendations/id/{id}:
+    put:
+      summary: Update recommendation by id (search across users)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationUpdate'
+      responses:
+        '200':
+          description: updated
+components:
+  schemas:
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        courseId:
+          type: integer
+        score:
+          type: number
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        ttl:
+          type: integer
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    RecommendationCreate:
+      type: object
+      required: [userId, courseId]
+      properties:
+        userId:
+          type: string
+        courseId:
+          type: integer
+        score:
+          type: number
+        reason:
+          type: string
+        ttl:
+          type: integer
+    RecommendationUpdate:
+      type: object
+      properties:
+        courseId:
+          type: integer
+        score:
+          type: number
+        reason:
+          type: string
+        ttl:
+          type: integer
+
