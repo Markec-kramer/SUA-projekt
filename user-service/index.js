@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-const fs = require('fs');
 const yaml = require('js-yaml');
 const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');

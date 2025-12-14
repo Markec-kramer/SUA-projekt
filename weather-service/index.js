@@ -2,7 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const Redis = require('ioredis');
 const cors = require('cors');
-const fs = require('fs');
 const yaml = require('js-yaml');
 
 const app = express();
