@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from 'react-toastify';
+import { fetchWithAuth } from '../api';
 import Card from "../components/Card";
 import Button from "../components/Button";
 
@@ -17,27 +19,30 @@ export default function LoginPage() {
 
     try {
       const res = await fetch(`${API_URL}/users/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.message || "Napaka pri prijavi");
+        toast.error(data.message || 'Napaka pri prijavi');
+        setMessage(data.message || 'Napaka pri prijavi');
         return;
       }
 
-      // shrani userja lokalno
-      localStorage.setItem("user", JSON.stringify(data));
-      setMessage("Prijava uspešna! Preusmerjam na Home...");
-      setTimeout(() => {
-        navigate("/");
-      }, 1000);
+      // shrani token posebej in osnovne podatke
+      if (data.token) localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify({ id: data.id, email: data.email, name: data.name }));
+      toast.success('Prijava uspešna');
+      setMessage('Prijava uspešna! Preusmerjam na Home...');
+      setTimeout(() => navigate('/'), 800);
     } catch (err) {
       console.error(err);
-      setMessage("Napaka pri povezavi s strežnikom");
+      toast.error('Napaka pri povezavi s strežnikom');
+      setMessage('Napaka pri povezavi s strežnikom');
     }
   }
 

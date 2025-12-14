@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import { fetchWithAuth } from '../api';
 
 const WEATHER_API_URL = "http://localhost:4004";
 
@@ -31,8 +32,8 @@ export default function WeatherPage() {
       setMessage("Enter a city name.");
       return;
     }
-    try {
-      const res = await fetch(
+      try {
+      const res = await fetchWithAuth(
         `${WEATHER_API_URL}/weather/${encodeURIComponent(target)}`,
       );
       if (res.status === 404) {
@@ -62,11 +63,10 @@ export default function WeatherPage() {
     const body = { tempC: Number(tempC), conditions };
     if (ttl) body.ttl = Number(ttl);
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${WEATHER_API_URL}/weather/${encodeURIComponent(city)}`,
         {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         },
       );
@@ -78,7 +78,7 @@ export default function WeatherPage() {
       setMessage(`Stored ${city} (ttl=${data.ttl})`);
       // Refresh the saved record from server so we show ttl/expiresAt as computed by backend
       try {
-        const getRes = await fetch(
+        const getRes = await fetchWithAuth(
           `${WEATHER_API_URL}/weather/${encodeURIComponent(city)}`,
         );
         if (getRes.ok) {
@@ -118,7 +118,7 @@ export default function WeatherPage() {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await fetchWithAuth(
         `${WEATHER_API_URL}/weather/${encodeURIComponent(city)}`,
         {
           method: "DELETE",
@@ -144,7 +144,7 @@ export default function WeatherPage() {
   async function handleListAll() {
     setMessage("");
     try {
-      const res = await fetch(`${WEATHER_API_URL}/weather`);
+      const res = await fetchWithAuth(`${WEATHER_API_URL}/weather`);
       if (!res.ok) {
         setMessage("Error listing weather");
         return;
@@ -165,9 +165,8 @@ export default function WeatherPage() {
       return;
     }
     try {
-      const res = await fetch(`${WEATHER_API_URL}/weather`, {
+      const res = await fetchWithAuth(`${WEATHER_API_URL}/weather`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           city,
           tempC: Number(tempC),
@@ -192,9 +191,8 @@ export default function WeatherPage() {
     setMessage("");
     try {
       const payload = JSON.parse(bulkJson);
-      const res = await fetch(`${WEATHER_API_URL}/weather/bulk`, {
+      const res = await fetchWithAuth(`${WEATHER_API_URL}/weather/bulk`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -214,9 +212,8 @@ export default function WeatherPage() {
     setMessage("");
     try {
       const payload = JSON.parse(bulkJson);
-      const res = await fetch(`${WEATHER_API_URL}/weather/bulk`, {
+      const res = await fetchWithAuth(`${WEATHER_API_URL}/weather/bulk`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
@@ -236,9 +233,9 @@ export default function WeatherPage() {
     setMessage("");
     try {
       if (all) {
-        const res = await fetch(`${WEATHER_API_URL}/weather?all=1`, {
-          method: "DELETE",
-        });
+        const res = await fetchWithAuth(`${WEATHER_API_URL}/weather?all=1`, {
+        method: "DELETE",
+      });
         if (!res.ok && res.status !== 204) {
           const data = await res.json().catch(() => ({}));
           setMessage(data.message || "Error deleting all");
@@ -248,9 +245,8 @@ export default function WeatherPage() {
         return;
       }
       const cities = JSON.parse(bulkDeleteInput);
-      const res = await fetch(`${WEATHER_API_URL}/weather`, {
+      const res = await fetchWithAuth(`${WEATHER_API_URL}/weather`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cities }),
       });
       if (!res.ok && res.status !== 204) {

@@ -6,6 +6,35 @@ const axios = require("axios");
 const app = express();
 app.use(cors());
 app.use(express.json());
+const jwt = require("jsonwebtoken");
+const fs = require('fs');
+const path = require('path');
+const PUBLIC_KEY_PATH = process.env.JWT_PUBLIC_KEY_PATH || path.join(__dirname, '..', 'auth', 'public.pem');
+let PUBLIC_KEY = process.env.JWT_PUBLIC_KEY || null;
+if (!PUBLIC_KEY && fs.existsSync(PUBLIC_KEY_PATH)) PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
+
+// Simple auth middleware: if Authorization header present, verify token and attach decoded to req.user
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth)
+    return res.status(401).json({ message: "Authorization header required" });
+  const parts = auth.split(" ");
+  if (parts.length !== 2 || parts[0] !== "Bearer")
+    return res.status(401).json({ message: "Invalid Authorization header" });
+  const token = parts[1];
+  try {
+    const decoded = PUBLIC_KEY
+      ? jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] })
+      : jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
+app.use(authMiddleware);
 
 // DB pool
 const pool = new Pool({

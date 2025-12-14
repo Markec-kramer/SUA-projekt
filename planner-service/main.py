@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
@@ -6,6 +6,39 @@ import os
 import psycopg2
 import requests
 from datetime import datetime
+import jwt
+
+import pathlib
+
+JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret")
+# support RS256 public key via env or file
+JWT_PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY")
+JWT_PUBLIC_KEY_PATH = os.getenv("JWT_PUBLIC_KEY_PATH") or str(pathlib.Path(__file__).resolve().parents[1] / 'auth' / 'public.pem')
+if not JWT_PUBLIC_KEY and JWT_PUBLIC_KEY_PATH and pathlib.Path(JWT_PUBLIC_KEY_PATH).exists():
+    with open(JWT_PUBLIC_KEY_PATH, 'r', encoding='utf-8') as f:
+        JWT_PUBLIC_KEY = f.read()
+
+
+def get_current_user(request: Request):
+    auth = request.headers.get("Authorization")
+    if not auth:
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    parts = auth.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid auth header")
+    token = parts[1]
+    try:
+        if JWT_PUBLIC_KEY:
+            payload = jwt.decode(token, JWT_PUBLIC_KEY, algorithms=["RS256"])
+        else:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        # attach token to request state for downstream calls
+        request.state.token = token
+        return {"payload": payload, "token": token}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 app = FastAPI()
 app.add_middleware(
@@ -71,17 +104,19 @@ class StudySessionOut(StudySessionIn):
 
 
 # Helpers to check remote services
-def user_exists(user_id: int) -> bool:
+def user_exists(user_id: int, token: Optional[str] = None) -> bool:
     try:
-        r = requests.get(f"{USER_SERVICE_URL}/users/{user_id}", timeout=2)
+        headers = {"Authorization": token} if token else {}
+        r = requests.get(f"{USER_SERVICE_URL}/users/{user_id}", timeout=2, headers=headers)
         return r.status_code == 200
     except:
         return False
 
 
-def course_exists(course_id: int) -> bool:
+def course_exists(course_id: int, token: Optional[str] = None) -> bool:
     try:
-        r = requests.get(f"{COURSE_SERVICE_URL}/courses/{course_id}", timeout=2)
+        headers = {"Authorization": token} if token else {}
+        r = requests.get(f"{COURSE_SERVICE_URL}/courses/{course_id}", timeout=2, headers=headers)
         return r.status_code == 200
     except:
         return False
@@ -95,7 +130,7 @@ def startup_event():
 # ========== GET ENDPOINTS ==========
 
 @app.get("/study-sessions", response_model=List[StudySessionOut])
-def list_sessions(user_id: Optional[int] = None):
+def list_sessions(user_id: Optional[int] = None, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
 
@@ -137,7 +172,7 @@ def list_sessions(user_id: Optional[int] = None):
 
 
 @app.get("/study-sessions/{session_id}", response_model=StudySessionOut)
-def get_session(session_id: int):
+def get_session(session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -169,12 +204,13 @@ def get_session(session_id: int):
 # ========== POST ENDPOINTS ==========
 
 @app.post("/study-sessions", response_model=StudySessionOut, status_code=201)
-def create_session(session: StudySessionIn):
+def create_session(session: StudySessionIn, current_user=Depends(get_current_user)):
 
-    if not user_exists(session.user_id):
+    token = current_user.get('token') if isinstance(current_user, dict) else None
+
+    if not user_exists(session.user_id, token=token):
         raise HTTPException(status_code=400, detail="User ne obstaja")
-
-    if not course_exists(session.course_id):
+    if not course_exists(session.course_id, token=token):
         raise HTTPException(status_code=400, detail="Course ne obstaja")
 
     conn = get_conn()
@@ -211,7 +247,7 @@ def create_session(session: StudySessionIn):
 
 
 @app.post("/study-sessions/{session_id}/complete")
-def complete_session(session_id: int):
+def complete_session(session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -237,7 +273,7 @@ def complete_session(session_id: int):
 # ========== PUT ENDPOINTS ==========
 
 @app.put("/study-sessions/{session_id}", response_model=StudySessionOut)
-def update_session(session_id: int, session: StudySessionIn):
+def update_session(session_id: int, session: StudySessionIn, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -277,7 +313,7 @@ def update_session(session_id: int, session: StudySessionIn):
 
 
 @app.put("/study-sessions/{session_id}/reschedule")
-def reschedule_session(session_id: int, new_start: str, new_end: str):
+def reschedule_session(session_id: int, new_start: str, new_end: str, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
@@ -304,7 +340,7 @@ def reschedule_session(session_id: int, new_start: str, new_end: str):
 # ========== DELETE ENDPOINTS ==========
 
 @app.delete("/study-sessions/{session_id}")
-def delete_session(session_id: int):
+def delete_session(session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM study_sessions WHERE id=%s", (session_id,))
@@ -316,7 +352,7 @@ def delete_session(session_id: int):
 
 
 @app.delete("/study-sessions")
-def delete_all_sessions(user_id: Optional[int] = None):
+def delete_all_sessions(user_id: Optional[int] = None, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
 

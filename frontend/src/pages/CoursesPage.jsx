@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import { fetchWithAuth } from '../api';
 
 const COURSE_API_URL = "http://localhost:4002";
 
@@ -17,7 +18,7 @@ export default function CoursesPage() {
   useEffect(() => {
     async function loadCourses() {
       try {
-        const res = await fetch(`${COURSE_API_URL}/courses`);
+        const res = await fetchWithAuth(`${COURSE_API_URL}/courses`);
         const data = await res.json();
         setCourses(data);
       } catch (err) {
@@ -39,9 +40,8 @@ export default function CoursesPage() {
     }
 
     try {
-      const res = await fetch(`${COURSE_API_URL}/courses`, {
+      const res = await fetchWithAuth(`${COURSE_API_URL}/courses`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
           description,
@@ -70,7 +70,7 @@ export default function CoursesPage() {
   async function handleDeleteCourse(id) {
     setMessage("");
     try {
-      const res = await fetch(`${COURSE_API_URL}/courses/${id}`, {
+      const res = await fetchWithAuth(`${COURSE_API_URL}/courses/${id}`, {
         method: "DELETE",
       });
 

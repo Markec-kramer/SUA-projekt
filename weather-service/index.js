@@ -8,6 +8,30 @@ const app = express();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: CORS_ORIGIN }));
 app.use(bodyParser.json());
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+const PUBLIC_KEY_PATH = process.env.JWT_PUBLIC_KEY_PATH || path.join(__dirname, '..', 'auth', 'public.pem');
+let PUBLIC_KEY = process.env.JWT_PUBLIC_KEY || null;
+if (!PUBLIC_KEY && fs.existsSync(PUBLIC_KEY_PATH)) PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth) return res.status(401).json({ error: 'authorization_required' });
+  const parts = auth.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ error: 'invalid_auth_header' });
+  const token = parts[1];
+  try {
+    const decoded = PUBLIC_KEY ? jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] }) : jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ error: 'invalid_or_expired_token' });
+  }
+}
+
+app.use(authMiddleware);
 
 const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Card from "../components/Card";
 import Button from "../components/Button";
+import { fetchWithAuth } from '../api';
 
 const PLANNER_API_URL = "http://localhost:4003";
 
@@ -25,7 +26,7 @@ export default function PlannerPage() {
         return;
       }
       try {
-        const res = await fetch(`${PLANNER_API_URL}/study-sessions?user_id=${userId}`);
+        const res = await fetchWithAuth(`${PLANNER_API_URL}/study-sessions?user_id=${userId}`);
         const data = await res.json();
         setSessions(data);
       } catch (err) {
@@ -47,9 +48,8 @@ export default function PlannerPage() {
     }
 
     try {
-      const res = await fetch(`${PLANNER_API_URL}/study-sessions`, {
+      const res = await fetchWithAuth(`${PLANNER_API_URL}/study-sessions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: user.id,
           course_id: Number(courseId),
@@ -80,7 +80,7 @@ export default function PlannerPage() {
 
   async function handleComplete(id) {
     try {
-      const res = await fetch(`${PLANNER_API_URL}/study-sessions/${id}/complete`, {
+      const res = await fetchWithAuth(`${PLANNER_API_URL}/study-sessions/${id}/complete`, {
         method: "POST",
       });
 
@@ -97,7 +97,7 @@ export default function PlannerPage() {
 
   async function handleDelete(id) {
     try {
-      const res = await fetch(`${PLANNER_API_URL}/study-sessions/${id}`, {
+      const res = await fetchWithAuth(`${PLANNER_API_URL}/study-sessions/${id}`, {
         method: "DELETE",
       });
 
