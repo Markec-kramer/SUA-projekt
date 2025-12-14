@@ -135,6 +135,20 @@ def startup_event():
     init_db()
 
 
+# Health endpoint - public (no auth required)
+@app.get("/healthz")
+def healthz():
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"unavailable: {str(e)}")
+
+
 # ========== GET ENDPOINTS ==========
 
 @app.get("/study-sessions", response_model=List[StudySessionOut])

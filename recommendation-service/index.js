@@ -31,6 +31,16 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Health endpoint - BEFORE auth middleware (public endpoint)
+app.get('/healthz', async (req, res) => {
+  try {
+    await redis.ping();
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
 app.use(authMiddleware);
 
 const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
@@ -82,15 +92,6 @@ async function seedInitialRecommendations() {
   }
 }
 
-// Health
-app.get('/healthz', async (req, res) => {
-  try {
-    await redis.ping();
-    res.status(200).json({ status: 'ok' });
-  } catch (err) {
-    res.status(503).json({ status: 'unavailable', error: err.message });
-  }
-});
 
 /**
  * @openapi

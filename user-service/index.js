@@ -57,6 +57,18 @@ function hashRefreshToken(token) {
   return crypto.createHmac('sha256', JWT_SECRET).update(token).digest('hex');
 }
 
+// Health endpoint - public (no auth required)
+app.get('/healthz', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ message: 'Authorization header required' });
@@ -256,8 +268,8 @@ app.post('/token/refresh', async (req, res) => {
     if (userRes.rows.length === 0) return res.status(401).json({ message: 'User not found' });
     const user = userRes.rows[0];
 
-    // issue new access token
-    const accessToken = jwt.sign({ sub: String(user.id), name: user.name }, JWT_SECRET, { algorithm: 'HS256', expiresIn: JWT_EXP });
+    // issue new access token using the same signing method as login
+    const accessToken = signAccessToken({ sub: String(user.id), name: user.name });
 
     // rotate refresh token
     const newRefresh = crypto.randomBytes(48).toString('hex');

@@ -34,6 +34,18 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Health endpoint - BEFORE auth middleware (public endpoint)
+app.get('/healthz', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
 app.use(authMiddleware);
 
 // Swagger (dev only)
