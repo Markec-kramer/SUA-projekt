@@ -22,6 +22,7 @@ services:
       DB_PASSWORD: user_password
       DB_NAME: user_db
       PORT: 4001
+      SWAGGER_ENABLED: "1"
     depends_on:
       - user-db
     ports:
@@ -51,6 +52,7 @@ services:
       DB_NAME: course_db
       PORT: 4002
       USER_SERVICE_URL: http://user-service:4001
+      SWAGGER_ENABLED: "1"
     depends_on:
       - course-db
       - user-service
@@ -82,6 +84,7 @@ services:
       PORT: 4003
       USER_SERVICE_URL: http://user-service:4001
       COURSE_SERVICE_URL: http://course-service:4002
+      SWAGGER_ENABLED: "1"
     depends_on:
       - planner-db
       - user-service
@@ -107,6 +110,7 @@ services:
       REDIS_PORT: 6379
       PORT: 4004
       DEFAULT_TTL: 3600
+      SWAGGER_ENABLED: "1"
     depends_on:
       - weather-db
     ports:
@@ -131,6 +135,7 @@ services:
       PORT: 4005
       DEFAULT_TTL: 86400
       CORS_ORIGIN: '*'
+      SWAGGER_ENABLED: "1"
     depends_on:
       - recommendation-db
     ports:

@@ -1,0 +1,189 @@
+openapi: 3.0.0
+info:
+  title: weather-service
+  version: 1.0.0
+  description: Weather cache service backed by Redis. Dev docs.
+servers:
+  - url: http://localhost:4004
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: ok
+  /weather:
+    get:
+      summary: List all cached weather entries
+      responses:
+        '200':
+          description: array of weather objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Weather'
+    post:
+      summary: Create one weather entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeatherCreate'
+      responses:
+        '201':
+          description: created
+    delete:
+      summary: Bulk delete weather entries or delete all
+      parameters:
+        - in: query
+          name: all
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cities:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '204':
+          description: deleted
+  /weather/bulk:
+    post:
+      summary: Create multiple weather entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/WeatherCreate'
+      responses:
+        '201':
+          description: created
+    put:
+      summary: Bulk update weather entries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/WeatherUpdate'
+      responses:
+        '200':
+          description: updated
+  /weather/{city}:
+    get:
+      summary: Get weather for a city
+      parameters:
+        - name: city
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Weather object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Weather'
+        '404':
+          description: not found
+    post:
+      summary: Create a weather entry for city
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeatherCreate'
+      responses:
+        '201':
+          description: created
+    put:
+      summary: Update/create weather for a city
+      parameters:
+        - name: city
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeatherUpdate'
+      responses:
+        '201':
+          description: created/updated
+    delete:
+      summary: Delete weather for a city
+      parameters:
+        - name: city
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: deleted
+components:
+  schemas:
+    Weather:
+      type: object
+      properties:
+        city:
+          type: string
+        tempC:
+          type: number
+        conditions:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        source:
+          type: string
+        ttl:
+          type: integer
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+    WeatherCreate:
+      type: object
+      required: [city, tempC, conditions]
+      properties:
+        city:
+          type: string
+        tempC:
+          type: number
+        conditions:
+          type: string
+        ttl:
+          type: integer
+          description: ttl in seconds (0 for persistent)
+    WeatherUpdate:
+      type: object
+      required: [tempC, conditions]
+      properties:
+        tempC:
+          type: number
+        conditions:
+          type: string
+        ttl:
+          type: integer
+          description: ttl in seconds (0 for persistent)
+
