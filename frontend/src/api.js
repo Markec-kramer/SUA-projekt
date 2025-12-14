@@ -1,4 +1,4 @@
-const DEFAULT_BASE = process.env.REACT_APP_API_BASE || '';
+const DEFAULT_BASE = import.meta.env.VITE_API_BASE || '';
 
 export async function fetchWithAuth(url, opts = {}) {
   const token = localStorage.getItem('token');
