@@ -24,6 +24,19 @@ let PUBLIC_KEY = process.env.JWT_PUBLIC_KEY || null;
 if (!PRIVATE_KEY && fs.existsSync(PRIVATE_KEY_PATH)) PRIVATE_KEY = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8');
 if (!PUBLIC_KEY && fs.existsSync(PUBLIC_KEY_PATH)) PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
 
+// DEBUG: show if keys were loaded (do not print full keys)
+console.log('JWT: PRIVATE_KEY present=', !!PRIVATE_KEY, 'PUBLIC_KEY present=', !!PUBLIC_KEY);
+
+// stricter check: ensure PEM header exists
+if (PRIVATE_KEY && !PRIVATE_KEY.trim().startsWith('-----BEGIN')) {
+  console.warn('Loaded PRIVATE_KEY does not start with PEM header — ignoring PRIVATE_KEY');
+  PRIVATE_KEY = null;
+}
+if (PUBLIC_KEY && !PUBLIC_KEY.trim().startsWith('-----BEGIN')) {
+  console.warn('Loaded PUBLIC_KEY does not start with PEM header — ignoring PUBLIC_KEY');
+  PUBLIC_KEY = null;
+}
+
 function isLikelyPrivateKey(key) {
   if (!key || typeof key !== 'string') return false;
   return key.includes('BEGIN RSA PRIVATE KEY') || key.includes('BEGIN PRIVATE KEY');
@@ -218,9 +231,8 @@ app.post("/users/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
 
     // ustvarimo access JWT in refresh token
-    const accessToken = PRIVATE_KEY
-      ? jwt.sign({ sub: String(user.id), name: user.name }, PRIVATE_KEY, { algorithm: 'RS256', expiresIn: JWT_EXP })
-      : jwt.sign({ sub: String(user.id), name: user.name }, JWT_SECRET, { algorithm: 'HS256', expiresIn: JWT_EXP });
+    // Use helper that attempts RS256 then falls back to HS256 on error
+    const accessToken = signAccessToken({ sub: String(user.id), name: user.name });
 
     const refreshToken = crypto.randomBytes(48).toString('hex');
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
