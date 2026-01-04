@@ -162,6 +162,55 @@ services:
     volumes:
       - ./auth:/app/auth:ro
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"      # AMQP port
+      - "15672:15672"    # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq-init.sh:/docker-entrypoint-init.d/init.sh:ro
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  log-db:
+    image: postgres:16-alpine
+    container_name: log-db
+    environment:
+      POSTGRES_USER: log_service
+      POSTGRES_PASSWORD: log_password
+      POSTGRES_DB: log_db
+    ports:
+      - "5436:5432"  # host 5436 -> container 5432
+    volumes:
+      - log_db_data:/var/lib/postgresql/data
+
+  log-service:
+    build: ./log-service
+    container_name: log-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: log-db
+      DB_PORT: 5432
+      DB_USER: log_service
+      DB_PASSWORD: log_password
+      DB_NAME: log_db
+      PORT: 4006
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - log-db
+      - rabbitmq
+    ports:
+      - "4006:4006"
+
 
 volumes:
   user_db_data:
@@ -169,3 +218,5 @@ volumes:
   planner_db_data:
   weather_db_data:
   recommendation_db_data:
+  rabbitmq_data:
+  log_db_data:

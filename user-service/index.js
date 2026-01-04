@@ -5,6 +5,8 @@ const yaml = require('js-yaml');
 const jwt = require("jsonwebtoken");
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXP = process.env.JWT_EXP || "1h";
@@ -13,6 +15,18 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// ===== CORRELATION ID MIDDLEWARE =====
+// Generate or extract correlation ID from request header
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || uuidv4();
+  req.correlationId = correlationId;
+  
+  // Add correlation ID to response header for tracking
+  res.setHeader('x-correlation-id', correlationId);
+  
+  next();
+});
 
 const fs = require('fs');
 const path = require('path');
@@ -76,8 +90,10 @@ app.get('/healthz', async (req, res) => {
     const client = await pool.connect();
     await client.query('SELECT 1');
     client.release();
+    logger.info(req.path, req.correlationId, 'Health check passed');
     res.status(200).json({ status: 'ok' });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Health check failed: ${err.message}`);
     res.status(503).json({ status: 'unavailable', error: err.message });
   }
 });
@@ -167,13 +183,15 @@ async function initDb() {
 // 1) seznam userjev
 app.get("/users", authMiddleware, async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, 'Fetching all users');
     const result = await query(
       "SELECT id, email, name FROM users ORDER BY id",
       []
     );
+    logger.info(req.path, req.correlationId, `Retrieved ${result.rows.length} users`);
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error fetching users: ${err.message}`);
     res.status(500).json({ message: "Error fetching users" });
   }
 });
@@ -181,15 +199,19 @@ app.get("/users", authMiddleware, async (req, res) => {
 // 2) en user po id
 app.get("/users/:id", authMiddleware, async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, `Fetching user with ID: ${req.params.id}`);
     const result = await query(
       "SELECT id, email, name FROM users WHERE id = $1",
       [req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, `User not found for ID: ${req.params.id}`);
       return res.status(404).json({ message: "User not found" });
+    }
+    logger.info(req.path, req.correlationId, `User retrieved successfully for ID: ${req.params.id}`);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error fetching user: ${err.message}`);
     res.status(500).json({ message: "Error fetching user" });
   }
 });
@@ -199,18 +221,21 @@ app.get("/users/:id", authMiddleware, async (req, res) => {
 app.post("/users/register", async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password || !name) {
+    logger.warn(req.path, req.correlationId, 'Registration attempt with missing fields');
     return res
       .status(400)
       .json({ message: "email, password, name are required" });
   }
   try {
+    logger.info(req.path, req.correlationId, `User registration attempt for email: ${email}`);
     const result = await query(
       "INSERT INTO users (email, password, name) VALUES ($1, $2, $3) RETURNING id, email, name",
       [email, password, name]
     );
+    logger.info(req.path, req.correlationId, `User registered successfully with ID: ${result.rows[0].id}`);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `User registration failed: ${err.message}`);
     res.status(400).json({ message: "Error creating user" });
   }
 });
@@ -219,16 +244,21 @@ app.post("/users/register", async (req, res) => {
 app.post("/users/login", async (req, res) => {
   const { email, password } = req.body;
   try {
+    logger.info(req.path, req.correlationId, `Login attempt for email: ${email}`);
     const result = await query(
       "SELECT id, email, name, password FROM users WHERE email = $1",
       [email]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, `Login failed: User not found for email: ${email}`);
       return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     const user = result.rows[0];
-    if (user.password !== password)
+    if (user.password !== password) {
+      logger.warn(req.path, req.correlationId, `Login failed: Invalid password for email: ${email}`);
       return res.status(401).json({ message: "Invalid credentials" });
+    }
 
     // ustvarimo access JWT in refresh token
     // Use helper that attempts RS256 then falls back to HS256 on error
@@ -251,9 +281,10 @@ app.post("/users/login", async (req, res) => {
       maxAge: REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000,
     });
 
+    logger.info(req.path, req.correlationId, `User logged in successfully: ${user.id}`);
     res.json({ id: user.id, email: user.email, name: user.name, token: accessToken });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Login error: ${err.message}`);
     res.status(500).json({ message: "Error while logging in" });
   }
 });
@@ -261,23 +292,34 @@ app.post("/users/login", async (req, res) => {
 // refresh endpoint - rotates refresh token and issues a new access token
 app.post('/token/refresh', async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, 'Token refresh attempt');
     const { refreshToken } = req.cookies || {};
-    if (!refreshToken) return res.status(401).json({ message: 'No refresh token' });
+    if (!refreshToken) {
+      logger.warn(req.path, req.correlationId, 'Token refresh failed: No refresh token provided');
+      return res.status(401).json({ message: 'No refresh token' });
+    }
 
     const hashed = hashRefreshToken(refreshToken);
     const found = await query('SELECT user_id, expires_at FROM refresh_tokens WHERE token = $1', [hashed]);
-    if (found.rows.length === 0) return res.status(401).json({ message: 'Invalid refresh token' });
+    if (found.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, 'Token refresh failed: Invalid refresh token');
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
 
     const row = found.rows[0];
     const expiresAt = new Date(row.expires_at);
     if (expiresAt.getTime() < Date.now()) {
       await query('DELETE FROM refresh_tokens WHERE token = $1', [refreshToken]);
+      logger.warn(req.path, req.correlationId, 'Token refresh failed: Refresh token expired');
       return res.status(401).json({ message: 'Refresh token expired' });
     }
 
     // fetch user
     const userRes = await query('SELECT id, email, name FROM users WHERE id = $1', [row.user_id]);
-    if (userRes.rows.length === 0) return res.status(401).json({ message: 'User not found' });
+    if (userRes.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, 'Token refresh failed: User not found');
+      return res.status(401).json({ message: 'User not found' });
+    }
     const user = userRes.rows[0];
 
     // issue new access token using the same signing method as login
@@ -290,9 +332,10 @@ app.post('/token/refresh', async (req, res) => {
     await query('UPDATE refresh_tokens SET token = $1, expires_at = $2 WHERE token = $3', [newHashed, newExpires, hashed]);
 
     res.cookie('refreshToken', newRefresh, { httpOnly: true, sameSite: 'lax', secure: COOKIE_SECURE, maxAge: REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000 });
+    logger.info(req.path, req.correlationId, `Token refreshed successfully for user: ${user.id}`);
     res.json({ id: user.id, email: user.email, name: user.name, token: accessToken });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Token refresh error: ${err.message}`);
     res.status(500).json({ message: 'Error refreshing token' });
   }
 });
@@ -300,15 +343,17 @@ app.post('/token/refresh', async (req, res) => {
 // logout - remove refresh token
 app.post('/users/logout', async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, 'User logout attempt');
     const { refreshToken } = req.cookies || {};
     if (refreshToken) {
       const hashed = hashRefreshToken(refreshToken);
       await query('DELETE FROM refresh_tokens WHERE token = $1', [hashed]);
     }
     res.clearCookie('refreshToken');
+    logger.info(req.path, req.correlationId, 'User logged out successfully');
     res.json({ message: 'Logged out' });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Logout error: ${err.message}`);
     res.status(500).json({ message: 'Error logging out' });
   }
 });
@@ -318,15 +363,19 @@ app.post('/users/logout', async (req, res) => {
 app.put("/users/:id", authMiddleware, async (req, res) => {
   const { name } = req.body;
   try {
+    logger.info(req.path, req.correlationId, `Updating user name for ID: ${req.params.id}`);
     const result = await query(
       "UPDATE users SET name = $1 WHERE id = $2 RETURNING id, email, name",
       [name, req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, `User not found for ID: ${req.params.id}`);
       return res.status(404).json({ message: "User not found" });
+    }
+    logger.info(req.path, req.correlationId, `User name updated successfully for ID: ${req.params.id}`);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error updating user: ${err.message}`);
     res.status(500).json({ message: "Error updating user" });
   }
 });
@@ -335,15 +384,19 @@ app.put("/users/:id", authMiddleware, async (req, res) => {
 app.put("/users/:id/password", authMiddleware, async (req, res) => {
   const { password } = req.body;
   try {
+    logger.info(req.path, req.correlationId, `Updating password for user ID: ${req.params.id}`);
     const result = await query(
       "UPDATE users SET password = $1 WHERE id = $2 RETURNING id",
       [password, req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.warn(req.path, req.correlationId, `User not found for ID: ${req.params.id}`);
       return res.status(404).json({ message: "User not found" });
+    }
+    logger.info(req.path, req.correlationId, `Password updated successfully for user ID: ${req.params.id}`);
     res.json({ message: "Password updated" });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error updating password: ${err.message}`);
     res.status(500).json({ message: "Error updating password" });
   }
 });
@@ -352,10 +405,12 @@ app.put("/users/:id/password", authMiddleware, async (req, res) => {
 // 1) izbriši enega
 app.delete("/users/:id", authMiddleware, async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, `Deleting user with ID: ${req.params.id}`);
     await query("DELETE FROM users WHERE id = $1", [req.params.id]);
+    logger.info(req.path, req.correlationId, `User deleted successfully with ID: ${req.params.id}`);
     res.json({ message: "User deleted" });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error deleting user: ${err.message}`);
     res.status(500).json({ message: "Error deleting user" });
   }
 });
@@ -363,10 +418,12 @@ app.delete("/users/:id", authMiddleware, async (req, res) => {
 // 2) izbriši vse (za test/reset)
 app.delete("/users", authMiddleware, async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, 'Deleting all users');
     await query("DELETE FROM users", []);
+    logger.warn(req.path, req.correlationId, 'All users deleted');
     res.json({ message: "All users deleted" });
   } catch (err) {
-    console.error(err);
+    logger.error(req.path, req.correlationId, `Error deleting all users: ${err.message}`);
     res.status(500).json({ message: "Error deleting all users" });
   }
 });
@@ -376,11 +433,31 @@ const PORT = process.env.PORT || 4001;
 
 initDb()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`User service listening on port ${PORT}`);
+    return initializeLogger();
+  })
+  .then(() => {
+    const server = app.listen(PORT, () => {
+      logger.info('localhost', 'startup', `User service listening on port ${PORT}`);
+    });
+
+    // Handle graceful shutdown
+    process.on('SIGTERM', async () => {
+      logger.info('localhost', 'shutdown', 'SIGTERM received, shutting down gracefully');
+      server.close(async () => {
+        await closeLogger();
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', async () => {
+      logger.info('localhost', 'shutdown', 'SIGINT received, shutting down gracefully');
+      server.close(async () => {
+        await closeLogger();
+        process.exit(0);
+      });
     });
   })
   .catch((err) => {
-    console.error("Error initializing DB:", err);
+    console.error("Error initializing:", err);
     process.exit(1);
   });

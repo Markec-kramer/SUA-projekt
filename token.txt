@@ -1,11 +1,17 @@
 
-filip.skrget@Filips-MacBook-Pro-2 ~ % curl -X POST http://localhost:4001/users/register \
+curl -X POST http://localhost:4001/users/register \
   -H "Content-Type: application/json" \
   -d '{"email":"jwt@test.com","password":"test","name":"JWT Test"}'
-{"message":"Error creating user"}%                                              filip.skrget@Filips-MacBook-Pro-2 ~ % curl -X POST http://localhost:4001/users/register \
+{"message":"Error creating user"}%
+
+curl -X POST http://localhost:4001/users/register \
   -H "Content-Type: application/json" \
   -d '{"email":"jwt2@test.com","password":"test","name":"JWT Test"}'
-{"id":7,"email":"jwt2@test.com","name":"JWT Test"}%                             filip.skrget@Filips-MacBook-Pro-2 ~ % LOGIN_RESPONSE=$(curl -s -X POST http://localhost:4001/users/login \
+
+
+{"id":7,"email":"jwt2@test.com","name":"JWT Test"}%
+
+LOGIN_RESPONSE=$(curl -s -X POST http://localhost:4001/users/login \
   -H "Content-Type: application/json" \
   -d '{"email":"jwt@test.com","password":"test"}')
 
