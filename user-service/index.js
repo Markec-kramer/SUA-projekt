@@ -12,7 +12,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXP = process.env.JWT_EXP || "1h";
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -95,6 +96,20 @@ app.get('/healthz', async (req, res) => {
   } catch (err) {
     logger.error(req.path, req.correlationId, `Health check failed: ${err.message}`);
     res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
+// Internal endpoint for service-to-service communication
+app.get('/internal/users/:id/exists', async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT id FROM users WHERE id = $1",
+      [req.params.id]
+    );
+    res.json({ exists: result.rows.length > 0 });
+  } catch (err) {
+    logger.error(req.path, req.correlationId, `Error checking user existence: ${err.message}`);
+    res.status(500).json({ message: "Error checking user existence" });
   }
 });
 

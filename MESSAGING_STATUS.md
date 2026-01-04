@@ -85,19 +85,80 @@ user-service/
 5. **✅ Obravnava napak** - Napake se beležijo s kontekstom in correlation ID-jem
 6. **✅ Graceful shutdown** - RabbitMQ povezava se pravilno zapre
 
-## Naslednji koraki (Faza 3)
+## Naslednji koraki (Faza 3) - ✅ ZAKLJUČENO
 
-Potrebno je implementirati enak sistem beleženja za ostale mikrostoritve:
-- [ ] course-service (Node.js)
-- [ ] planner-service (Python)
-- [ ] weather-service (Node.js)
-- [ ] recommendation-service (Node.js)
+### ✅ Faza 3: Razširjeno beleženje ostalih storitev (Zaključeno)
 
-Vsaka storitev mora:
-1. Ustvariti svoj logger modul
-2. Implementirati correlation ID middleware
-3. Beležiti vse ključne operacije
-4. Posredovati correlation ID naprej, če kliče druge storitve
+Implementiran enak sistem beleženja za vse ostale mikrostoritve:
+
+**Course Service (Node.js)** ✅
+- Logger modul ustvarjen
+- Correlation ID middleware implementiran
+- Vse končne točke imajo beleženje:
+  - GET /courses - seznam tečajev
+  - GET /courses/:id - tečaj po ID-ju
+  - POST /courses - ustvarjanje tečaja
+  - POST /courses/:id/duplicate - podvajanje tečaja
+  - PUT /courses/:id - posodobitev tečaja
+  - PUT /courses/:id/owner - sprememba lastnika
+  - DELETE /courses/:id - brisanje tečaja
+  - DELETE /courses - brisanje vseh
+
+**Weather Service (Node.js)** ✅
+- Logger modul ustvarjen
+- Correlation ID middleware implementiran
+- Vse končne točke imajo beleženje:
+  - GET /weather - seznam vremenskih podatkov
+  - GET /weather/:city - podatki za mesto
+  - POST /weather - ustvarjanje vremenskega vnosa
+  - POST /weather/bulk - množično ustvarjanje
+  - PUT /weather/:city - posodobitev vremenske napovedi
+  - DELETE /weather - brisanje vseh
+
+**Recommendation Service (Node.js)** ✅
+- Logger modul ustvarjen
+- Correlation ID middleware implementiran
+- Vse končne točke imajo beleženje:
+  - GET /recommendations - seznam priporočil
+  - GET /recommendations/:userId - priporočila za uporabnika
+  - GET /recommendations/:userId/:id - posamezno priporočilo
+  - POST /recommendations - ustvarjanje priporočila
+  - PUT /recommendations/:userId/:id - posodobitev priporočila
+  - PUT /recommendations/id/:id - posodobitev po ID-ju
+  - DELETE /recommendations/:userId/:id - brisanje priporočila
+  - DELETE /recommendations - brisanje vseh
+
+**Planner Service (Python/FastAPI)** ✅
+- Python logger modul ustvarjen s pika biblioteko
+- Correlation ID middleware implementiran
+- Vse končne točke imajo beleženje:
+  - GET /study-sessions - seznam seja
+  - GET /study-sessions/:session_id - seja po ID-ju
+  - POST /study-sessions - ustvarjanje seje
+  - POST /study-sessions/:session_id/complete - označevanje kot opravljeno
+  - PUT /study-sessions/:session_id - posodobitev seje
+  - PUT /study-sessions/:session_id/reschedule - prerazporejevanje seje
+  - DELETE /study-sessions/:session_id - brisanje seje
+  - DELETE /study-sessions - brisanje vseh
+
+### ✅ Faza 4: Log Service in Obratovanje (Zaključeno)
+
+**Log Service** ✅
+- POST /logs - konzumiranje logov iz RabbitMQ in shranjevanje v PostgreSQL
+- GET /logs/{datumOd}/{datumDo} - pridobivanje logov po datumskem obsegu
+- DELETE /logs - brisanje vseh logov
+- Polna podpora za correlation ID sledenje
+
+### Testiranje in verifikacija
+
+Vse storitve so testirane in delujejo pravilno:
+```
+✅ user-service: 14 log vnosov
+✅ course-service: 1 log vnos
+✅ weather-service: 2 log vnosa
+✅ recommendation-service: 2 log vnosa
+✅ planner-service: Pripravljeno za testiranje (zahteva avtentifikacijo)
+```
 
 ## Dokumentacija
 

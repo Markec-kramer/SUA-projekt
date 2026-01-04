@@ -13,6 +13,8 @@
     "swagger-ui-express": "^4.6.3",
     "swagger-jsdoc": "^6.2.8",
     "js-yaml": "^4.1.0",
-    "jsonwebtoken": "^9.0.0"
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0",
+    "amqplib": "^0.10.3"
   }
 }

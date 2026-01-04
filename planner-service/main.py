@@ -7,6 +7,8 @@ import psycopg2
 import requests
 from datetime import datetime
 import jwt
+import uuid
+from logger import initialize_logger, log_info, log_error, close_logger
 
 import pathlib
 
@@ -22,22 +24,29 @@ if not JWT_PUBLIC_KEY and JWT_PUBLIC_KEY_PATH and pathlib.Path(JWT_PUBLIC_KEY_PA
 def get_current_user(request: Request):
     auth = request.headers.get("Authorization")
     if not auth:
+        print(f"[AUTH] No Authorization header")
         raise HTTPException(status_code=401, detail="Authorization header required")
     parts = auth.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
+        print(f"[AUTH] Invalid auth header format: {auth[:50]}")
         raise HTTPException(status_code=401, detail="Invalid auth header")
     token = parts[1]
     try:
         if JWT_PUBLIC_KEY:
+            print(f"[AUTH] Decoding with RS256, key present: {bool(JWT_PUBLIC_KEY)}, token: {token[:20]}...")
             payload = jwt.decode(token, JWT_PUBLIC_KEY, algorithms=["RS256"])
         else:
+            print(f"[AUTH] Decoding with HS256")
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         # attach token to request state for downstream calls
         request.state.token = token
+        print(f"[AUTH] Token decoded successfully, user_id: {payload.get('id')}")
         return {"payload": payload, "token": token}
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as e:
+        print(f"[AUTH] Token expired: {e}")
         raise HTTPException(status_code=401, detail="Token expired")
-    except Exception:
+    except Exception as e:
+        print(f"[AUTH] Token decode failed: {type(e).__name__}: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # determine whether to expose docs
@@ -49,9 +58,18 @@ else:
     # disable built-in docs/openapi when not enabled
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+# Correlation ID middleware
+@app.middleware("http")
+async def add_correlation_id(request: Request, call_next):
+    correlation_id = request.headers.get("x-correlation-id") or str(uuid.uuid4())
+    request.state.correlation_id = correlation_id
+    response = await call_next(request)
+    response.headers["x-correlation-id"] = correlation_id
+    return response
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],      
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -114,49 +132,56 @@ class StudySessionOut(StudySessionIn):
 # Helpers to check remote services
 def user_exists(user_id: int, token: Optional[str] = None) -> bool:
     try:
-        headers = {"Authorization": token} if token else {}
-        r = requests.get(f"{USER_SERVICE_URL}/users/{user_id}", timeout=2, headers=headers)
-        return r.status_code == 200
+        r = requests.get(f"{USER_SERVICE_URL}/internal/users/{user_id}/exists", timeout=2)
+        return r.status_code == 200 and r.json().get('exists') == True
     except:
         return False
 
 
 def course_exists(course_id: int, token: Optional[str] = None) -> bool:
     try:
-        headers = {"Authorization": token} if token else {}
-        r = requests.get(f"{COURSE_SERVICE_URL}/courses/{course_id}", timeout=2, headers=headers)
-        return r.status_code == 200
+        r = requests.get(f"{COURSE_SERVICE_URL}/internal/courses/{course_id}/exists", timeout=2)
+        return r.status_code == 200 and r.json().get('exists') == True
     except:
         return False
 
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     init_db()
+    initialize_logger()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    close_logger()
 
 
 # Health endpoint - public (no auth required)
 @app.get("/healthz")
-def healthz():
+def healthz(request: Request):
     try:
         conn = get_conn()
         cur = conn.cursor()
         cur.execute("SELECT 1")
         cur.close()
         conn.close()
+        log_info(request.url.path, request.state.correlation_id, "Health check passed")
         return {"status": "ok"}
     except Exception as e:
+        log_error(request.url.path, request.state.correlation_id, f"Health check failed: {str(e)}")
         raise HTTPException(status_code=503, detail=f"unavailable: {str(e)}")
 
 
 # ========== GET ENDPOINTS ==========
 
 @app.get("/study-sessions", response_model=List[StudySessionOut])
-def list_sessions(user_id: Optional[int] = None, current_user=Depends(get_current_user)):
+def list_sessions(request: Request, user_id: Optional[int] = None, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
 
     if user_id:
+        log_info(request.url.path, request.state.correlation_id, f"Fetching study sessions for user_id: {user_id}")
         cur.execute(
             """
             SELECT id,user_id,course_id,title,start_time,end_time,status
@@ -167,6 +192,7 @@ def list_sessions(user_id: Optional[int] = None, current_user=Depends(get_curren
             (user_id,),
         )
     else:
+        log_info(request.url.path, request.state.correlation_id, "Fetching all study sessions")
         cur.execute(
             """
             SELECT id,user_id,course_id,title,start_time,end_time,status
@@ -179,6 +205,7 @@ def list_sessions(user_id: Optional[int] = None, current_user=Depends(get_curren
     cur.close()
     conn.close()
 
+    log_info(request.url.path, request.state.correlation_id, f"Retrieved {len(rows)} study sessions")
     return [
         StudySessionOut(
             id=r[0],
@@ -194,9 +221,10 @@ def list_sessions(user_id: Optional[int] = None, current_user=Depends(get_curren
 
 
 @app.get("/study-sessions/{session_id}", response_model=StudySessionOut)
-def get_session(session_id: int, current_user=Depends(get_current_user)):
+def get_session(request: Request, session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
+    log_info(request.url.path, request.state.correlation_id, f"Fetching study session with id: {session_id}")
     cur.execute(
         """
         SELECT id,user_id,course_id,title,start_time,end_time,status
@@ -210,8 +238,10 @@ def get_session(session_id: int, current_user=Depends(get_current_user)):
     conn.close()
 
     if not row:
+        log_error(request.url.path, request.state.correlation_id, f"Study session {session_id} not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
+    log_info(request.url.path, request.state.correlation_id, f"Successfully retrieved study session {session_id}")
     return StudySessionOut(
         id=row[0],
         user_id=row[1],
@@ -226,13 +256,17 @@ def get_session(session_id: int, current_user=Depends(get_current_user)):
 # ========== POST ENDPOINTS ==========
 
 @app.post("/study-sessions", response_model=StudySessionOut, status_code=201)
-def create_session(session: StudySessionIn, current_user=Depends(get_current_user)):
+def create_session(request: Request, session: StudySessionIn, current_user=Depends(get_current_user)):
 
     token = current_user.get('token') if isinstance(current_user, dict) else None
 
+    log_info(request.url.path, request.state.correlation_id, f"Creating study session for user {session.user_id}, course {session.course_id}")
+
     if not user_exists(session.user_id, token=token):
+        log_error(request.url.path, request.state.correlation_id, f"User {session.user_id} does not exist")
         raise HTTPException(status_code=400, detail="User ne obstaja")
     if not course_exists(session.course_id, token=token):
+        log_error(request.url.path, request.state.correlation_id, f"Course {session.course_id} does not exist")
         raise HTTPException(status_code=400, detail="Course ne obstaja")
 
     conn = get_conn()
@@ -257,6 +291,7 @@ def create_session(session: StudySessionIn, current_user=Depends(get_current_use
     cur.close()
     conn.close()
 
+    log_info(request.url.path, request.state.correlation_id, f"Study session created successfully with id {row[0]}")
     return StudySessionOut(
         id=row[0],
         user_id=row[1],
@@ -269,9 +304,10 @@ def create_session(session: StudySessionIn, current_user=Depends(get_current_use
 
 
 @app.post("/study-sessions/{session_id}/complete")
-def complete_session(session_id: int, current_user=Depends(get_current_user)):
+def complete_session(request: Request, session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
+    log_info(request.url.path, request.state.correlation_id, f"Marking study session {session_id} as completed")
     cur.execute(
         """
         UPDATE study_sessions
@@ -287,17 +323,20 @@ def complete_session(session_id: int, current_user=Depends(get_current_user)):
     conn.close()
 
     if not row:
+        log_error(request.url.path, request.state.correlation_id, f"Study session {session_id} not found for completion")
         raise HTTPException(status_code=404, detail="Session not found")
 
+    log_info(request.url.path, request.state.correlation_id, f"Study session {session_id} marked as completed")
     return {"message": "Session marked as completed"}
 
 
 # ========== PUT ENDPOINTS ==========
 
 @app.put("/study-sessions/{session_id}", response_model=StudySessionOut)
-def update_session(session_id: int, session: StudySessionIn, current_user=Depends(get_current_user)):
+def update_session(request: Request, session_id: int, session: StudySessionIn, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
+    log_info(request.url.path, request.state.correlation_id, f"Updating study session {session_id}")
     cur.execute(
         """
         UPDATE study_sessions
@@ -321,8 +360,10 @@ def update_session(session_id: int, session: StudySessionIn, current_user=Depend
     conn.close()
 
     if not row:
+        log_error(request.url.path, request.state.correlation_id, f"Study session {session_id} not found for update")
         raise HTTPException(status_code=404, detail="Session not found")
 
+    log_info(request.url.path, request.state.correlation_id, f"Study session {session_id} updated successfully")
     return StudySessionOut(
         id=row[0],
         user_id=row[1],
@@ -335,9 +376,10 @@ def update_session(session_id: int, session: StudySessionIn, current_user=Depend
 
 
 @app.put("/study-sessions/{session_id}/reschedule")
-def reschedule_session(session_id: int, new_start: str, new_end: str, current_user=Depends(get_current_user)):
+def reschedule_session(request: Request, session_id: int, new_start: str, new_end: str, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
+    log_info(request.url.path, request.state.correlation_id, f"Rescheduling study session {session_id}")
     cur.execute(
         """
         UPDATE study_sessions
@@ -354,37 +396,44 @@ def reschedule_session(session_id: int, new_start: str, new_end: str, current_us
     conn.close()
 
     if not row:
+        log_error(request.url.path, request.state.correlation_id, f"Study session {session_id} not found for rescheduling")
         raise HTTPException(status_code=404, detail="Session not found")
 
+    log_info(request.url.path, request.state.correlation_id, f"Study session {session_id} rescheduled successfully")
     return {"message": "Session rescheduled"}
 
 
 # ========== DELETE ENDPOINTS ==========
 
 @app.delete("/study-sessions/{session_id}")
-def delete_session(session_id: int, current_user=Depends(get_current_user)):
+def delete_session(request: Request, session_id: int, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
+    log_info(request.url.path, request.state.correlation_id, f"Deleting study session {session_id}")
     cur.execute("DELETE FROM study_sessions WHERE id=%s", (session_id,))
     conn.commit()
     cur.close()
     conn.close()
 
+    log_info(request.url.path, request.state.correlation_id, f"Study session {session_id} deleted successfully")
     return {"message": "Session deleted"}
 
 
 @app.delete("/study-sessions")
-def delete_all_sessions(user_id: Optional[int] = None, current_user=Depends(get_current_user)):
+def delete_all_sessions(request: Request, user_id: Optional[int] = None, current_user=Depends(get_current_user)):
     conn = get_conn()
     cur = conn.cursor()
 
     if user_id:
+        log_info(request.url.path, request.state.correlation_id, f"Deleting all study sessions for user {user_id}")
         cur.execute("DELETE FROM study_sessions WHERE user_id=%s", (user_id,))
     else:
+        log_info(request.url.path, request.state.correlation_id, "Deleting all study sessions")
         cur.execute("DELETE FROM study_sessions")
 
     conn.commit()
     cur.close()
     conn.close()
 
+    log_info(request.url.path, request.state.correlation_id, "Sessions deleted successfully")
     return {"message": "Sessions deleted"}

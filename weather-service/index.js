@@ -3,12 +3,23 @@ const bodyParser = require('body-parser');
 const Redis = require('ioredis');
 const cors = require('cors');
 const yaml = require('js-yaml');
+const { v4: uuidv4 } = require('uuid');
+const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const app = express();
 // Enable CORS - default allow all origins for local development
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-app.use(cors({ origin: CORS_ORIGIN }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(bodyParser.json());
+
+// ===== CORRELATION ID MIDDLEWARE =====
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || uuidv4();
+  req.correlationId = correlationId;
+  res.setHeader('x-correlation-id', correlationId);
+  next();
+});
+
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
@@ -36,8 +47,10 @@ function authMiddleware(req, res, next) {
 app.get('/healthz', async (req, res) => {
   try {
     await redis.ping();
+    logger.info(req.path, req.correlationId, 'Health check passed');
     res.status(200).json({ status: 'ok' });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Health check failed: ${err.message}`);
     res.status(503).json({ status: 'unavailable', error: err.message });
   }
 });
@@ -111,8 +124,12 @@ app.get('/weather/:city', async (req, res) => {
   const city = req.params.city.toLowerCase();
   const key = `weather:${city}`;
   try {
+    logger.info(req.path, req.correlationId, `Fetching weather for city: ${city}`);
     const raw = await redis.get(key);
-    if (!raw) return res.status(404).json({ error: 'not_found', message: 'no data for city' });
+    if (!raw) {
+      logger.info(req.path, req.correlationId, `No data found for city: ${city}`);
+      return res.status(404).json({ error: 'not_found', message: 'no data for city' });
+    }
     const payload = JSON.parse(raw);
 
     // Get TTL in seconds. -2 = key does not exist, -1 = key exists but has no associated expire
@@ -125,8 +142,10 @@ app.get('/weather/:city', async (req, res) => {
     payload.source = 'cache';
     payload.ttl = ttlSeconds >= 0 ? ttlSeconds : null; // null if persistent or not applicable
     payload.expiresAt = expiresAt; // ISO string or null
+    logger.info(req.path, req.correlationId, `Successfully retrieved weather for city: ${city}`);
     return res.json(payload);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching weather for city ${city}: ${err.message}`);
     console.error('GET error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -135,8 +154,12 @@ app.get('/weather/:city', async (req, res) => {
 // List all cached weather entries (GET /weather)
 app.get('/weather', async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, "Fetching all cached weather entries");
     const keys = await redis.keys('weather:*');
-    if (!keys || keys.length === 0) return res.json([]);
+    if (!keys || keys.length === 0) {
+      logger.info(req.path, req.correlationId, "No weather entries found in cache");
+      return res.json([]);
+    }
     const values = await redis.mget(...keys);
     const results = [];
     for (let i = 0; i < keys.length; i++) {
@@ -148,8 +171,10 @@ app.get('/weather', async (req, res) => {
       if (ttlSeconds > 0) expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
       results.push({ ...obj, source: 'cache', ttl: ttlSeconds >= 0 ? ttlSeconds : null, expiresAt });
     }
+    logger.info(req.path, req.correlationId, `Retrieved ${results.length} weather entries from cache`);
     return res.json(results);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching weather entries: ${err.message}`);
     console.error('LIST error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -159,6 +184,7 @@ app.get('/weather', async (req, res) => {
 app.post('/weather', async (req, res) => {
   const { city, tempC, conditions, ttl } = req.body || {};
   if (!city || typeof tempC !== 'number' || typeof conditions !== 'string') {
+    logger.error(req.path, req.correlationId, "Missing or invalid required fields: city, tempC, conditions");
     return res.status(400).json({ error: 'invalid_input', message: 'city, tempC(number) and conditions(string) are required' });
   }
   const key = `weather:${city.toLowerCase()}`;
@@ -166,10 +192,13 @@ app.post('/weather', async (req, res) => {
   const value = { city: city.toLowerCase(), tempC, conditions, timestamp: now };
   const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
   try {
+    logger.info(req.path, req.correlationId, `Creating weather entry for city: ${city}`);
     if (appliedTtl > 0) await redis.set(key, JSON.stringify(value), 'EX', appliedTtl);
     else await redis.set(key, JSON.stringify(value));
+    logger.info(req.path, req.correlationId, `Weather entry for city ${city} created successfully`);
     return res.status(201).json({ city: value.city, ttl: appliedTtl, timestamp: now });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error creating weather entry for city ${city}: ${err.message}`);
     console.error('POST error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -178,7 +207,11 @@ app.post('/weather', async (req, res) => {
 // POST /weather/bulk - create multiple entries (body: [{city,tempC,conditions,ttl?}, ...])
 app.post('/weather/bulk', async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
-  if (!items.length) return res.status(400).json({ error: 'invalid_input', message: 'Expecting array in request body' });
+  if (!items.length) {
+    logger.error(req.path, req.correlationId, "Bulk weather request received with empty array");
+    return res.status(400).json({ error: 'invalid_input', message: 'Expecting array in request body' });
+  }
+  logger.info(req.path, req.correlationId, `Processing bulk weather request with ${items.length} items`);
   const results = [];
   for (const it of items) {
     const { city, tempC, conditions, ttl } = it;
@@ -192,9 +225,11 @@ app.post('/weather/bulk', async (req, res) => {
       else await redis.set(key, JSON.stringify(value));
       results.push({ city: value.city, ttl: appliedTtl, timestamp: now });
     } catch (err) {
+      logger.error(req.path, req.correlationId, `Error in bulk POST for city ${key}: ${err.message}`);
       console.error('BULK POST error', key, err);
     }
   }
+  logger.info(req.path, req.correlationId, `Bulk weather request completed with ${results.length} successful entries`);
   return res.status(201).json(results);
 });
 
@@ -285,11 +320,29 @@ app.delete('/weather', async (req, res) => {
   try {
     await redis.ping();
     await seedInitialData();
+    await initializeLogger();
   } catch (err) {
     console.error('Warning: could not seed initial data, redis may be unavailable', err.message || err);
   }
 
-  app.listen(PORT, () => {
-    console.log(`weather-service listening on port ${PORT}, redis ${REDIS_HOST}:${REDIS_PORT}`);
+  const server = app.listen(PORT, () => {
+    logger.info('localhost', 'startup', `weather-service listening on port ${PORT}, redis ${REDIS_HOST}:${REDIS_PORT}`);
+  });
+
+  // Handle graceful shutdown
+  process.on('SIGTERM', async () => {
+    logger.info('localhost', 'shutdown', 'SIGTERM received, shutting down gracefully');
+    server.close(async () => {
+      await closeLogger();
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', async () => {
+    logger.info('localhost', 'shutdown', 'SIGINT received, shutting down gracefully');
+    server.close(async () => {
+      await closeLogger();
+      process.exit(0);
+    });
   });
 })();

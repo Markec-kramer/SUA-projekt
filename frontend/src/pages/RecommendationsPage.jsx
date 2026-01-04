@@ -70,13 +70,13 @@ export default function RecommendationsPage() {
       setMessage("userId and courseId are required.");
       return;
     }
-    const body = { courseId: Number(courseId) };
+    const body = { userId: Number(userId), courseId: Number(courseId) };
     if (score) body.score = Number(score);
     if (reason) body.reason = reason;
     if (ttl) body.ttl = Number(ttl);
     try {
       const res = await fetchWithAuth(
-        `${RECO_API_URL}/recommendations/${encodeURIComponent(userId)}`,
+        `${RECO_API_URL}/recommendations`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

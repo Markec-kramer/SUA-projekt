@@ -151,7 +151,7 @@ services:
       REDIS_PORT: 6379
       PORT: 4005
       DEFAULT_TTL: 86400
-      CORS_ORIGIN: '*'
+      CORS_ORIGIN: 'http://localhost:5173'
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem

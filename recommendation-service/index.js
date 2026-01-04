@@ -3,10 +3,11 @@ const bodyParser = require('body-parser');
 const Redis = require('ioredis');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const app = express();
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-app.use(cors({ origin: CORS_ORIGIN }));
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(bodyParser.json());
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
@@ -15,6 +16,14 @@ const PUBLIC_KEY_PATH = process.env.JWT_PUBLIC_KEY_PATH || path.join(__dirname, 
 let PUBLIC_KEY = process.env.JWT_PUBLIC_KEY || null;
 if (!PUBLIC_KEY && fs.existsSync(PUBLIC_KEY_PATH)) PUBLIC_KEY = fs.readFileSync(PUBLIC_KEY_PATH, 'utf8');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret';
+
+// Correlation ID middleware
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || uuidv4();
+  req.correlationId = correlationId;
+  res.setHeader('x-correlation-id', correlationId);
+  next();
+});
 
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
@@ -35,8 +44,10 @@ function authMiddleware(req, res, next) {
 app.get('/healthz', async (req, res) => {
   try {
     await redis.ping();
+    logger.info(req.path, req.correlationId, 'Health check passed');
     res.status(200).json({ status: 'ok' });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Health check failed: ${err.message}`);
     res.status(503).json({ status: 'unavailable', error: err.message });
   }
 });
@@ -111,7 +122,12 @@ app.get('/recommendations', async (req, res) => {
   const userId = req.query.userId;
   try {
     let pattern = 'rec:*';
-    if (userId) pattern = `rec:${userId}:*`;
+    if (userId) {
+      logger.info(req.path, req.correlationId, `Fetching recommendations for userId: ${userId}`);
+      pattern = `rec:${userId}:*`;
+    } else {
+      logger.info(req.path, req.correlationId, "Fetching all recommendations");
+    }
     const keys = await redis.keys(pattern);
     const results = [];
     if (keys.length > 0) {
@@ -122,8 +138,10 @@ app.get('/recommendations', async (req, res) => {
         results.push(obj);
       }
     }
+    logger.info(req.path, req.correlationId, `Retrieved ${results.length} recommendations`);
     res.json(results);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error listing recommendations: ${err.message}`);
     console.error('LIST error', err);
     res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -147,12 +165,18 @@ app.get('/recommendations', async (req, res) => {
 app.get('/recommendations/:userId', async (req, res) => {
   const userId = req.params.userId;
   try {
+    logger.info(req.path, req.correlationId, `Fetching recommendations for userId: ${userId}`);
     const keys = await redis.keys(`rec:${userId}:*`);
-    if (!keys || keys.length === 0) return res.status(404).json({ error: 'not_found', message: 'no recommendations' });
+    if (!keys || keys.length === 0) {
+      logger.info(req.path, req.correlationId, `No recommendations found for userId: ${userId}`);
+      return res.status(404).json({ error: 'not_found', message: 'no recommendations' });
+    }
     const values = await redis.mget(...keys);
     const results = values.filter(Boolean).map((v) => JSON.parse(v));
+    logger.info(req.path, req.correlationId, `Retrieved ${results.length} recommendations for userId: ${userId}`);
     res.json(results);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching recommendations for userId ${userId}: ${err.message}`);
     console.error('GET user recs error', err);
     res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -163,15 +187,21 @@ app.get('/recommendations/:userId/:id', async (req, res) => {
   const { userId, id } = req.params;
   const key = `rec:${userId}:${id}`;
   try {
+    logger.info(req.path, req.correlationId, `Fetching recommendation ${id} for userId: ${userId}`);
     const raw = await redis.get(key);
-    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    if (!raw) {
+      logger.info(req.path, req.correlationId, `Recommendation ${id} not found for userId: ${userId}`);
+      return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    }
     const obj = JSON.parse(raw);
     // attach ttl if present
     const ttlSeconds = await redis.ttl(key);
     obj.ttl = ttlSeconds >= 0 ? ttlSeconds : null;
     obj.expiresAt = ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
+    logger.info(req.path, req.correlationId, `Successfully retrieved recommendation ${id}`);
     res.json(obj);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching recommendation ${id}: ${err.message}`);
     console.error('GET rec by id error', err);
     res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -181,6 +211,7 @@ app.get('/recommendations/:userId/:id', async (req, res) => {
 app.post('/recommendations', async (req, res) => {
   const { userId, courseId, score, reason, ttl } = req.body || {};
   if (!userId || typeof courseId !== 'number') {
+    logger.error(req.path, req.correlationId, "Missing required fields: userId or courseId");
     return res.status(400).json({ error: 'invalid_input', message: 'userId and courseId required (courseId:number)' });
   }
   const id = uuidv4();
@@ -189,10 +220,13 @@ app.post('/recommendations', async (req, res) => {
   const val = { id, userId, courseId, score: typeof score === 'number' ? score : null, reason: reason || null, createdAt: now };
   const appliedTtl = Number.isInteger(ttl) && ttl > 0 ? ttl : DEFAULT_TTL;
   try {
+    logger.info(req.path, req.correlationId, `Creating recommendation for userId: ${userId}, courseId: ${courseId}`);
     if (appliedTtl > 0) await redis.set(key, JSON.stringify(val), 'EX', appliedTtl);
     else await redis.set(key, JSON.stringify(val));
+    logger.info(req.path, req.correlationId, `Recommendation created successfully with id: ${id}`);
     return res.status(201).json({ ...val, ttl: appliedTtl });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error creating recommendation: ${err.message}`);
     console.error('POST create rec error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -210,8 +244,12 @@ app.put('/recommendations/:userId/:id', async (req, res) => {
   const { courseId, score, reason, ttl } = req.body || {};
   const key = `rec:${userId}:${id}`;
   try {
+    logger.info(req.path, req.correlationId, `Updating recommendation ${id} for userId: ${userId}`);
     const raw = await redis.get(key);
-    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    if (!raw) {
+      logger.info(req.path, req.correlationId, `Recommendation ${id} not found for userId: ${userId}`);
+      return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    }
     const obj = JSON.parse(raw);
     const updated = {
       ...obj,
@@ -223,8 +261,10 @@ app.put('/recommendations/:userId/:id', async (req, res) => {
     const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
     if (appliedTtl > 0) await redis.set(key, JSON.stringify(updated), 'EX', appliedTtl);
     else await redis.set(key, JSON.stringify(updated));
+    logger.info(req.path, req.correlationId, `Recommendation ${id} updated successfully`);
     return res.json({ ...updated, ttl: appliedTtl });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error updating recommendation: ${err.message}`);
     console.error('PUT update rec error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -235,10 +275,17 @@ app.put('/recommendations/id/:id', async (req, res) => {
   const { id } = req.params;
   const { courseId, score, reason, ttl } = req.body || {};
   try {
+    logger.info(req.path, req.correlationId, `Updating recommendation by id: ${id}`);
     const key = await findKeyById(id);
-    if (!key) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    if (!key) {
+      logger.info(req.path, req.correlationId, `Recommendation ${id} not found`);
+      return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    }
     const raw = await redis.get(key);
-    if (!raw) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    if (!raw) {
+      logger.info(req.path, req.correlationId, `Recommendation ${id} not found (redis)`);
+      return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    }
     const obj = JSON.parse(raw);
     const updated = {
       ...obj,
@@ -250,8 +297,10 @@ app.put('/recommendations/id/:id', async (req, res) => {
     const appliedTtl = Number.isInteger(ttl) && ttl >= 0 ? ttl : DEFAULT_TTL;
     if (appliedTtl > 0) await redis.set(key, JSON.stringify(updated), 'EX', appliedTtl);
     else await redis.set(key, JSON.stringify(updated));
+    logger.info(req.path, req.correlationId, `Recommendation ${id} updated successfully`);
     return res.json({ ...updated, ttl: appliedTtl });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error updating recommendation ${id}: ${err.message}`);
     console.error('PUT update by id error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -262,10 +311,16 @@ app.delete('/recommendations/:userId/:id', async (req, res) => {
   const { userId, id } = req.params;
   const key = `rec:${userId}:${id}`;
   try {
+    logger.info(req.path, req.correlationId, `Deleting recommendation ${id} for userId: ${userId}`);
     const removed = await redis.del(key);
-    if (removed === 0) return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    if (removed === 0) {
+      logger.info(req.path, req.correlationId, `Recommendation ${id} not found for deletion`);
+      return res.status(404).json({ error: 'not_found', message: 'recommendation not found' });
+    }
+    logger.info(req.path, req.correlationId, `Recommendation ${id} deleted successfully`);
     return res.status(204).send();
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error deleting recommendation: ${err.message}`);
     console.error('DELETE single rec error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -277,16 +332,27 @@ app.delete('/recommendations', async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
   try {
     if (deleteAll) {
+      logger.info(req.path, req.correlationId, "Deleting all recommendations");
       const keys = await redis.keys('rec:*');
-      if (!keys || keys.length === 0) return res.status(204).send();
+      if (!keys || keys.length === 0) {
+        logger.info(req.path, req.correlationId, "No recommendations found to delete");
+        return res.status(204).send();
+      }
       await redis.del(...keys);
+      logger.info(req.path, req.correlationId, `Deleted ${keys.length} recommendations`);
       return res.status(204).send();
     }
-    if (!ids.length) return res.status(400).json({ error: 'invalid_input', message: 'Provide ids array in body or use ?all=1' });
+    if (!ids.length) {
+      logger.error(req.path, req.correlationId, "Invalid bulk delete request - no ids provided");
+      return res.status(400).json({ error: 'invalid_input', message: 'Provide ids array in body or use ?all=1' });
+    }
     const keys = ids.map((it) => `rec:${it.userId}:${it.id}`);
+    logger.info(req.path, req.correlationId, `Bulk deleting ${keys.length} recommendations`);
     await redis.del(...keys);
+    logger.info(req.path, req.correlationId, `Bulk deleted ${keys.length} recommendations successfully`);
     return res.status(204).send();
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error in bulk delete: ${err.message}`);
     console.error('BULK DELETE recs error', err);
     return res.status(500).json({ error: 'server_error', message: err.message });
   }
@@ -297,10 +363,28 @@ app.delete('/recommendations', async (req, res) => {
   try {
     await redis.ping();
     await seedInitialRecommendations();
+    await initializeLogger();
   } catch (err) {
     console.error('Warning: could not seed recommendations', err.message || err);
   }
-  app.listen(PORT, () => {
-    console.log(`recommendation-service listening on port ${PORT}, redis ${REDIS_HOST}:${REDIS_PORT}`);
+  const server = app.listen(PORT, () => {
+    logger.info('localhost', 'startup', `recommendation-service listening on port ${PORT}, redis ${REDIS_HOST}:${REDIS_PORT}`);
+  });
+
+  // Handle graceful shutdown
+  process.on('SIGTERM', async () => {
+    logger.info('localhost', 'shutdown', 'SIGTERM received, shutting down gracefully');
+    server.close(async () => {
+      await closeLogger();
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', async () => {
+    logger.info('localhost', 'shutdown', 'SIGINT received, shutting down gracefully');
+    server.close(async () => {
+      await closeLogger();
+      process.exit(0);
+    });
   });
 })();

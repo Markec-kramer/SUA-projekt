@@ -2,10 +2,22 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const axios = require("axios");
+const { v4: uuidv4 } = require('uuid');
+const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const app = express();
-app.use(cors());
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
+
+// ===== CORRELATION ID MIDDLEWARE =====
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || uuidv4();
+  req.correlationId = correlationId;
+  res.setHeader('x-correlation-id', correlationId);
+  next();
+});
+
 const jwt = require("jsonwebtoken");
 const fs = require('fs');
 const path = require('path');
@@ -40,9 +52,25 @@ app.get('/healthz', async (req, res) => {
     const client = await pool.connect();
     await client.query('SELECT 1');
     client.release();
+    logger.info(req.path, req.correlationId, 'Health check passed');
     res.status(200).json({ status: 'ok' });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Health check failed: ${err.message}`);
     res.status(503).json({ status: 'unavailable', error: err.message });
+  }
+});
+
+// Internal endpoint for service-to-service communication
+app.get('/internal/courses/:id/exists', async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT id FROM courses WHERE id = $1",
+      [req.params.id]
+    );
+    res.json({ exists: result.rows.length > 0 });
+  } catch (err) {
+    logger.error(req.path, req.correlationId, `Error checking course existence: ${err.message}`);
+    res.status(500).json({ message: "Error checking course existence" });
   }
 });
 
@@ -108,8 +136,8 @@ async function initDb() {
 // preveri, če user obstaja v User Service
 async function checkUserExists(userId) {
   try {
-    const res = await axios.get(`${USER_SERVICE_URL}/users/${userId}`);
-    return res.status === 200;
+    const res = await axios.get(`${USER_SERVICE_URL}/internal/users/${userId}/exists`);
+    return res.data.exists === true;
   } catch (err) {
     return false;
   }
@@ -130,12 +158,15 @@ async function checkUserExists(userId) {
  */
 app.get("/courses", async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, "Fetching all courses");
     const result = await query(
       "SELECT id, title, description, owner_user_id, created_at FROM courses ORDER BY id",
       []
     );
+    logger.info(req.path, req.correlationId, `Successfully fetched ${result.rows.length} courses`);
     res.json(result.rows);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching courses: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error fetching courses" });
   }
@@ -144,14 +175,19 @@ app.get("/courses", async (req, res) => {
 // 2) en tečaj po id
 app.get("/courses/:id", async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, `Fetching course with id ${req.params.id}`);
     const result = await query(
       "SELECT id, title, description, owner_user_id, created_at FROM courses WHERE id = $1",
       [req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.info(req.path, req.correlationId, `Course with id ${req.params.id} not found`);
       return res.status(404).json({ message: "Course not found" });
+    }
+    logger.info(req.path, req.correlationId, `Successfully fetched course with id ${req.params.id}`);
     res.json(result.rows[0]);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error fetching course: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error fetching course" });
   }
@@ -162,6 +198,7 @@ app.get("/courses/:id", async (req, res) => {
 app.post("/courses", async (req, res) => {
   const { title, description, owner_user_id } = req.body;
   if (!title || !owner_user_id) {
+    logger.error(req.path, req.correlationId, "Missing required fields: title and owner_user_id");
     return res
       .status(400)
       .json({ message: "title in owner_user_id sta obvezna" });
@@ -170,16 +207,20 @@ app.post("/courses", async (req, res) => {
   // preveri, če user obstaja
   const userExists = await checkUserExists(owner_user_id);
   if (!userExists) {
+    logger.error(req.path, req.correlationId, `Owner user ${owner_user_id} does not exist`);
     return res.status(400).json({ message: "Owner user ne obstaja" });
   }
 
   try {
+    logger.info(req.path, req.correlationId, `Creating new course with title: ${title}`);
     const result = await query(
       "INSERT INTO courses (title, description, owner_user_id) VALUES ($1, $2, $3) RETURNING id, title, description, owner_user_id, created_at",
       [title, description || null, owner_user_id]
     );
+    logger.info(req.path, req.correlationId, `Course created successfully with id ${result.rows[0].id}`);
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error creating course: ${err.message}`);
     console.error(err);
     res.status(400).json({ message: "Error creating course" });
   }
@@ -189,20 +230,25 @@ app.post("/courses", async (req, res) => {
 app.post("/courses/:id/duplicate", async (req, res) => {
   const { id } = req.params;
   try {
+    logger.info(req.path, req.correlationId, `Duplicating course with id ${id}`);
     const original = await query(
       "SELECT title, description, owner_user_id FROM courses WHERE id=$1",
       [id]
     );
-    if (original.rows.length === 0)
+    if (original.rows.length === 0) {
+      logger.info(req.path, req.correlationId, `Course with id ${id} not found for duplication`);
       return res.status(404).json({ message: "Course not found" });
+    }
 
     const c = original.rows[0];
     const result = await query(
       "INSERT INTO courses (title, description, owner_user_id) VALUES ($1,$2,$3) RETURNING id, title, description, owner_user_id, created_at",
       [c.title + " (copy)", c.description, c.owner_user_id]
     );
+    logger.info(req.path, req.correlationId, `Course duplicated successfully, new id: ${result.rows[0].id}`);
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error duplicating course: ${err.message}`);
     console.error(err);
     res.status(400).json({ message: "Error duplicating course" });
   }
@@ -213,14 +259,19 @@ app.post("/courses/:id/duplicate", async (req, res) => {
 app.put("/courses/:id", async (req, res) => {
   const { title, description } = req.body;
   try {
+    logger.info(req.path, req.correlationId, `Updating course with id ${req.params.id}`);
     const result = await query(
       "UPDATE courses SET title = $1, description = $2 WHERE id = $3 RETURNING id, title, description, owner_user_id, created_at",
       [title, description, req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.info(req.path, req.correlationId, `Course with id ${req.params.id} not found for update`);
       return res.status(404).json({ message: "Course not found" });
+    }
+    logger.info(req.path, req.correlationId, `Course with id ${req.params.id} updated successfully`);
     res.json(result.rows[0]);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error updating course: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error updating course" });
   }
@@ -230,24 +281,31 @@ app.put("/courses/:id", async (req, res) => {
 app.put("/courses/:id/owner", async (req, res) => {
   const { owner_user_id } = req.body;
   if (!owner_user_id) {
+    logger.error(req.path, req.correlationId, "Missing required field: owner_user_id");
     return res.status(400).json({ message: "owner_user_id je obvezen" });
   }
 
   // preveri, če user obstaja
   const userExists = await checkUserExists(owner_user_id);
   if (!userExists) {
+    logger.error(req.path, req.correlationId, `Owner user ${owner_user_id} does not exist`);
     return res.status(400).json({ message: "Owner user ne obstaja" });
   }
 
   try {
+    logger.info(req.path, req.correlationId, `Changing owner of course ${req.params.id} to user ${owner_user_id}`);
     const result = await query(
       "UPDATE courses SET owner_user_id = $1 WHERE id = $2 RETURNING id, title, description, owner_user_id, created_at",
       [owner_user_id, req.params.id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
+      logger.info(req.path, req.correlationId, `Course with id ${req.params.id} not found for owner change`);
       return res.status(404).json({ message: "Course not found" });
+    }
+    logger.info(req.path, req.correlationId, `Course owner changed successfully`);
     res.json(result.rows[0]);
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error updating course owner: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error updating course owner" });
   }
@@ -257,9 +315,12 @@ app.put("/courses/:id/owner", async (req, res) => {
 // 1) izbriši en tečaj
 app.delete("/courses/:id", async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, `Deleting course with id ${req.params.id}`);
     await query("DELETE FROM courses WHERE id = $1", [req.params.id]);
+    logger.info(req.path, req.correlationId, `Course with id ${req.params.id} deleted successfully`);
     res.json({ message: "Course deleted" });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error deleting course: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error deleting course" });
   }
@@ -268,9 +329,12 @@ app.delete("/courses/:id", async (req, res) => {
 // 2) izbriši vse (za test/reset)
 app.delete("/courses", async (req, res) => {
   try {
+    logger.info(req.path, req.correlationId, "Deleting all courses");
     await query("DELETE FROM courses", []);
+    logger.info(req.path, req.correlationId, "All courses deleted successfully");
     res.json({ message: "All courses deleted" });
   } catch (err) {
+    logger.error(req.path, req.correlationId, `Error deleting all courses: ${err.message}`);
     console.error(err);
     res.status(500).json({ message: "Error deleting all courses" });
   }
@@ -281,11 +345,31 @@ const PORT = process.env.PORT || 4002;
 
 initDb()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Course service listening on port ${PORT}`);
+    return initializeLogger();
+  })
+  .then(() => {
+    const server = app.listen(PORT, () => {
+      logger.info('localhost', 'startup', `Course service listening on port ${PORT}`);
+    });
+
+    // Handle graceful shutdown
+    process.on('SIGTERM', async () => {
+      logger.info('localhost', 'shutdown', 'SIGTERM received, shutting down gracefully');
+      server.close(async () => {
+        await closeLogger();
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', async () => {
+      logger.info('localhost', 'shutdown', 'SIGINT received, shutting down gracefully');
+      server.close(async () => {
+        await closeLogger();
+        process.exit(0);
+      });
     });
   })
   .catch((err) => {
-    console.error("Error initializing DB:", err);
+    console.error("Error initializing:", err);
     process.exit(1);
   });

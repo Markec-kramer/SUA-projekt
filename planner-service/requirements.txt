@@ -2,4 +2,6 @@ fastapi
 uvicorn
 psycopg2-binary
 requests
-PyJWT
+PyJWT[crypto]
+pika
+python-multipart
