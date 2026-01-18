@@ -329,6 +329,42 @@ app.delete('/weather', async (req, res) => {
     logger.info('localhost', 'startup', `weather-service listening on port ${PORT}, redis ${REDIS_HOST}:${REDIS_PORT}`);
   });
 
+  // TEST ENDPOINT - Regenerate sample data
+  app.post('/test/seed-data', async (req, res) => {
+    try {
+      logger.info(req.path, req.correlationId, 'Regenerating sample weather data');
+
+      const samples = [
+        { city: 'Oslo', tempC: 3.5, conditions: 'Cloudy' },
+        { city: 'London', tempC: 8.0, conditions: 'Rainy' },
+        { city: 'Ljubljana', tempC: 12.0, conditions: 'Sunny' },
+        { city: 'Maribor', tempC: 10.0, conditions: 'Cloudy' },
+        { city: 'Paris', tempC: 15.0, conditions: 'Sunny' },
+      ];
+
+      let created = 0;
+      for (const s of samples) {
+        const key = `weather:${s.city.toLowerCase()}`;
+        const now = new Date().toISOString();
+        const value = { city: s.city, tempC: s.tempC, conditions: s.conditions, timestamp: now };
+
+        // Force overwrite with SET (not NX)
+        await redis.set(key, JSON.stringify(value), 'EX', DEFAULT_TTL);
+        created++;
+      }
+
+      logger.info(req.path, req.correlationId, `Successfully seeded ${created} weather entries`);
+      res.json({
+        success: true,
+        message: `Seeded ${created} sample weather entries`,
+        cities: samples.map(s => s.city)
+      });
+    } catch (err) {
+      logger.error(req.path, req.correlationId, `Error seeding data: ${err.message}`);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Handle graceful shutdown
   process.on('SIGTERM', async () => {
     logger.info('localhost', 'shutdown', 'SIGTERM received, shutting down gracefully');

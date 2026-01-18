@@ -217,6 +217,77 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
+// TEST ENDPOINT - Generate dummy log data for testing/demo
+// Usage: POST /test/generate-logs?count=100
+app.post('/test/generate-logs', async (req, res) => {
+  try {
+    const count = parseInt(req.query.count || '100', 10);
+
+    // Different services, endpoints, and patterns
+    const services = ['user-service', 'course-service', 'planner-service', 'weather-service', 'recommendation-service'];
+    const endpoints = {
+      'user-service': ['/users', '/users/1', '/users/2', '/login', '/token/refresh', '/healthz'],
+      'course-service': ['/courses', '/courses/1', '/courses/2', '/courses/3', '/healthz'],
+      'planner-service': ['/study-sessions', '/study-sessions/1', '/study-sessions/2', '/healthz'],
+      'weather-service': ['/weather', '/weather/Ljubljana', '/weather/Maribor', '/healthz'],
+      'recommendation-service': ['/recommendations', '/recommendations/1', '/healthz']
+    };
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (let i = 0; i < count; i++) {
+        const service = services[Math.floor(Math.random() * services.length)];
+        const endpointsList = endpoints[service];
+        const endpoint = endpointsList[Math.floor(Math.random() * endpointsList.length)];
+
+        // Create timestamp from last 7 days
+        const daysAgo = Math.floor(Math.random() * 7);
+        const timestamp = new Date();
+        timestamp.setDate(timestamp.getDate() - daysAgo);
+        timestamp.setHours(Math.floor(Math.random() * 24));
+        timestamp.setMinutes(Math.floor(Math.random() * 60));
+        timestamp.setSeconds(Math.floor(Math.random() * 60));
+
+        const message = `${timestamp.toISOString().split('T')[0]} ${String(timestamp.getHours()).padStart(2, '0')}:${String(timestamp.getMinutes()).padStart(2, '0')}:${String(timestamp.getSeconds()).padStart(2, '0')} INFO ${endpoint} Correlation: test-${i}`;
+
+        const rawData = {
+          path: endpoint,
+          service: service,
+          method: 'GET',
+          statusCode: Math.random() > 0.95 ? 500 : 200
+        };
+
+        await client.query(
+          `INSERT INTO logs (timestamp, service, message, raw_data) 
+           VALUES ($1, $2, $3, $4)`,
+          [timestamp, service, message, JSON.stringify(rawData)]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json({
+        success: true,
+        message: `Generated ${count} dummy log entries`,
+        generated: count
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error generating test logs:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to generate test logs'
+    });
+  }
+});
+
 // Start server
 initDb()
   .then(() => {
