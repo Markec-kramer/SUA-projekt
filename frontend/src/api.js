@@ -39,3 +39,78 @@ export async function fetchWithAuth(url, opts = {}) {
 
   return res;
 }
+// ===== METRICS SERVICE FUNCTIONS =====
+const METRICS_SERVICE_URL = "http://localhost:4007";
+
+export async function getMetricsLastCalled() {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/metrics/last-called`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Error fetching last called metric:', err);
+    throw err;
+  }
+}
+
+export async function getMetricsMostCalled() {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/metrics/most-called`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Error fetching most called metric:', err);
+    throw err;
+  }
+}
+
+export async function getMetricsCallCounts() {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/metrics/call-counts`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Error fetching call counts:', err);
+    throw err;
+  }
+}
+
+export async function recordMetricCall(klicanaStoritev, method = 'GET', service_name = 'frontend') {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/metrics/record`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ klicanaStoritev, method, service_name })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Error recording metric:', err);
+    throw err;
+  }
+}
+
+export async function getMetricsHealthCheck() {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/healthz`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Metrics service health check failed:', err);
+    throw err;
+  }
+}
+
+export async function clearMetricsBacklog() {
+  try {
+    const res = await fetch(`${METRICS_SERVICE_URL}/metrics/backlog`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('Error clearing metrics backlog:', err);
+    throw err;
+  }
+}

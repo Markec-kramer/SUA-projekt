@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const amqp = require('amqplib');
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
@@ -18,6 +20,42 @@ console.log('[log-service] CORS options:', corsOptions);
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// ===== CORRELATION ID MIDDLEWARE =====
+app.use((req, res, next) => {
+  const correlationId = req.headers['x-correlation-id'] || uuidv4();
+  req.correlationId = correlationId;
+  res.setHeader('x-correlation-id', correlationId);
+  next();
+});
+
+// ===== METRICS REPORTING MIDDLEWARE =====
+const METRICS_SERVICE_URL = process.env.METRICS_SERVICE_URL || 'http://localhost:4007';
+
+app.use((req, res, next) => {
+  // Capture the original end function
+  const originalEnd = res.end;
+  const startTime = Date.now();
+
+  res.end = function(chunk, encoding) {
+    const responseTime = Date.now() - startTime;
+    
+    // Send metrics asynchronously (don't block response)
+    axios.post(`${METRICS_SERVICE_URL}/metrics/record`, {
+      klicanaStoritev: req.path,
+      method: req.method,
+      service_name: 'log-service',
+      response_time_ms: responseTime
+    }).catch(err => {
+      console.warn(`[${req.correlationId}] Failed to record metric:`, err.message);
+    });
+
+    // Call the original end method
+    originalEnd.call(res, chunk, encoding);
+  };
+
+  next();
+});
 
 const PORT = process.env.PORT || 4006;
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672/';

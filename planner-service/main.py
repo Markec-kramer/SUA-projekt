@@ -67,6 +67,39 @@ async def add_correlation_id(request: Request, call_next):
     response.headers["x-correlation-id"] = correlation_id
     return response
 
+# Metrics reporting middleware
+import asyncio
+import time
+@app.middleware("http")
+async def report_metrics(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    response_time_ms = int((time.time() - start_time) * 1000)
+    
+    # Send metrics asynchronously
+    metrics_service_url = os.getenv("METRICS_SERVICE_URL", "http://localhost:4007")
+    asyncio.create_task(send_metrics(
+        metrics_service_url,
+        request.url.path,
+        request.method,
+        "planner-service",
+        response_time_ms,
+        request.state.correlation_id
+    ))
+    
+    return response
+
+async def send_metrics(url, endpoint, method, service_name, response_time_ms, correlation_id):
+    try:
+        requests.post(f"{url}/metrics/record", json={
+            "klicanaStoritev": endpoint,
+            "method": method,
+            "service_name": service_name,
+            "response_time_ms": response_time_ms
+        }, timeout=2)
+    except Exception as e:
+        print(f"[{correlation_id}] Failed to record metric: {e}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],      

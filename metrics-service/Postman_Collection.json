@@ -1,0 +1,281 @@
+{
+  "info": {
+    "name": "Metrics Service API",
+    "description": "Testna kolekcija za Metrics Service API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is ok\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('ok');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4007/healthz",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["healthz"]
+        },
+        "description": "Preveri zdravje storitve"
+      }
+    },
+    {
+      "name": "Record Call - User Service Registration",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Call recorded successfully\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.eql('Klic je bil uspešno zabeležen');",
+              "    pm.expect(jsonData.id).to.exist;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"klicanaStoritev\": \"/registrirajUporabnika\", \"method\": \"POST\", \"service_name\": \"user-service\", \"response_time_ms\": 125}"
+        },
+        "url": {
+          "raw": "http://localhost:4007/metrics/record",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "record"]
+        },
+        "description": "Beleži klical /registrirajUporabnika"
+      }
+    },
+    {
+      "name": "Record Call - User Service Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"klicanaStoritev\": \"/login\", \"method\": \"POST\", \"service_name\": \"user-service\", \"response_time_ms\": 87}"
+        },
+        "url": {
+          "raw": "http://localhost:4007/metrics/record",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "record"]
+        },
+        "description": "Beleži klic /login"
+      }
+    },
+    {
+      "name": "Record Call - User Service Get Profile",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"klicanaStoritev\": \"/getProfil\", \"method\": \"GET\", \"service_name\": \"user-service\", \"response_time_ms\": 142}"
+        },
+        "url": {
+          "raw": "http://localhost:4007/metrics/record",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "record"]
+        },
+        "description": "Beleži klic /getProfil"
+      }
+    },
+    {
+      "name": "Record Call - Course Service",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"klicanaStoritev\": \"/createCourse\", \"method\": \"POST\", \"service_name\": \"course-service\", \"response_time_ms\": 156}"
+        },
+        "url": {
+          "raw": "http://localhost:4007/metrics/record",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "record"]
+        },
+        "description": "Beleži klic /createCourse od course-service"
+      }
+    },
+    {
+      "name": "Get Last Called Endpoint",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Response contains endpoint info\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('endpoint');",
+              "    pm.expect(jsonData).to.have.property('method');",
+              "    pm.expect(jsonData).to.have.property('timestamp');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4007/metrics/last-called",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "last-called"]
+        },
+        "description": "Vrne zadnje klicani endpoint"
+      }
+    },
+    {
+      "name": "Get Most Called Endpoint",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Response contains call count\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('endpoint');",
+              "    pm.expect(jsonData).to.have.property('call_count');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4007/metrics/most-called",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "most-called"]
+        },
+        "description": "Vrne najpogosteje klicani endpoint"
+      }
+    },
+    {
+      "name": "Get Call Counts - All Endpoints",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Response is array of call counts\", function () {",
+              "    pm.response.to.have.status(200);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "    if (jsonData.length > 0) {",
+              "        pm.expect(jsonData[0]).to.have.property('endpoint');",
+              "        pm.expect(jsonData[0]).to.have.property('call_count');",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:4007/metrics/call-counts",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "call-counts"]
+        },
+        "description": "Vrne seznam vseh endpointov s številom klicev"
+      }
+    },
+    {
+      "name": "Error Test - Missing Required Field",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Should return 400 error\", function () {",
+              "    pm.response.to.have.status(400);",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('error');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"method\": \"GET\"}"
+        },
+        "url": {
+          "raw": "http://localhost:4007/metrics/record",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4007",
+          "path": ["metrics", "record"]
+        },
+        "description": "Test error handling - manjka 'klicanaStoritev'"
+      }
+    }
+  ]
+}

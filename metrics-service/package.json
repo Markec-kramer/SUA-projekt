@@ -1,16 +1,17 @@
 {
-  "name": "log-service",
+  "name": "metrics-service",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "axios": "^1.6.0",
+    "cors": "^2.8.5",
     "express": "^4.19.0",
     "pg": "^8.11.0",
-    "amqplib": "^0.10.3",
-    "cors": "^2.8.5",
+    "swagger-ui-express": "^4.6.3",
+    "swagger-jsdoc": "^6.2.8",
+    "js-yaml": "^4.1.0",
     "uuid": "^9.0.0"
   }
 }

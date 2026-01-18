@@ -130,12 +130,44 @@ services:
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
+      METRICS_SERVICE_URL: http://metrics-service:4007
     depends_on:
       - weather-db
+      - metrics-service
     ports:
       - "4004:4004"
     volumes:
       - ./auth:/app/auth:ro
+
+  metrics-db:
+    image: postgres:16-alpine
+    container_name: metrics-db
+    environment:
+      POSTGRES_USER: metrics_service
+      POSTGRES_PASSWORD: metrics_password
+      POSTGRES_DB: metrics_db
+    ports:
+      - "5437:5432"  # host 5437 -> container 5432
+    volumes:
+      - metrics_db_data:/var/lib/postgresql/data
+
+  metrics-service:
+    build: ./metrics-service
+    container_name: metrics-service
+    restart: unless-stopped
+    environment:
+      DB_HOST: metrics-db
+      DB_PORT: 5432
+      DB_USER: metrics_service
+      DB_PASSWORD: metrics_password
+      DB_NAME: metrics_db
+      PORT: 4007
+      SWAGGER_ENABLED: "1"
+      CORS_ORIGIN: 'http://localhost:5173'
+    depends_on:
+      - metrics-db
+    ports:
+      - "4007:4007"
 
   recommendation-db:
     image: redis:7-alpine
@@ -222,6 +254,7 @@ volumes:
   course_db_data:
   planner_db_data:
   weather_db_data:
+  metrics_db_data:
   recommendation_db_data:
   rabbitmq_data:
   log_db_data:

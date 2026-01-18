@@ -25,6 +25,35 @@ app.use((req, res, next) => {
   next();
 });
 
+// ===== METRICS REPORTING MIDDLEWARE =====
+const axios = require('axios');
+const METRICS_SERVICE_URL = process.env.METRICS_SERVICE_URL || 'http://localhost:4007';
+
+app.use((req, res, next) => {
+  // Capture the original end function
+  const originalEnd = res.end;
+  const startTime = Date.now();
+
+  res.end = function(chunk, encoding) {
+    const responseTime = Date.now() - startTime;
+    
+    // Send metrics asynchronously (don't block response)
+    axios.post(`${METRICS_SERVICE_URL}/metrics/record`, {
+      klicanaStoritev: req.path,
+      method: req.method,
+      service_name: 'recommendation-service',
+      response_time_ms: responseTime
+    }).catch(err => {
+      console.warn(`[${req.correlationId}] Failed to record metric:`, err.message);
+    });
+
+    // Call the original end method
+    originalEnd.call(res, chunk, encoding);
+  };
+
+  next();
+});
+
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth) return res.status(401).json({ error: 'authorization_required' });

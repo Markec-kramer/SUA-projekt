@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import { fetchWithAuth } from '../api';
@@ -19,16 +19,18 @@ export default function RecommendationsPage() {
   const [userRecs, setUserRecs] = useState([]);
   const [allRecs, setAllRecs] = useState([]);
 
-  useEffect(() => {
-    if (user) {
-      setUserId(user.id.toString());
-      handleListForUser(null, user.id.toString());
-      handleListAll();
+  const handleListAll = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth(`${RECO_API_URL}/recommendations`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAllRecs(data);
+    } catch (err) {
+      console.error(err);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, []);
 
-  async function handleListForUser(e, userIdParam) {
+  const handleListForUser = useCallback(async (e, userIdParam) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
     setMessage("");
     setLoading(true);
@@ -61,7 +63,15 @@ export default function RecommendationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (user) {
+      setUserId(user.id.toString());
+      handleListForUser(null, user.id.toString());
+      handleListAll();
+    }
+  }, [user?.id, handleListForUser, handleListAll]);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -143,17 +153,6 @@ export default function RecommendationsPage() {
     } catch (err) {
       console.error(err);
       setMessage("Could not reach recommendation service");
-    }
-  }
-
-  async function handleListAll() {
-    try {
-      const res = await fetchWithAuth(`${RECO_API_URL}/recommendations`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setAllRecs(data);
-    } catch (err) {
-      console.error(err);
     }
   }
 
