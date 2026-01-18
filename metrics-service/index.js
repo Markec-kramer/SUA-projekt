@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJSDoc = require('swagger-jsdoc');
 const axios = require('axios');
@@ -25,6 +27,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 console.log(`[metrics-service] CORS_ORIGIN=${CORS_ORIGIN}`);
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // ===== CORRELATION ID MIDDLEWARE =====
 app.use((req, res, next) => {
@@ -164,8 +167,25 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJSDoc(swaggerOptions);
 
+// Cookie-based auth middleware for Swagger UI
+function swaggerAuthMiddleware(req, res, next) {
+  const token = req.cookies.auth_token;
+  if (!token) {
+    return res.status(401).send('<h1>Unauthorized</h1><p>Please <a href="http://localhost:5173/login">login</a> first to access API documentation</p>');
+  }
+  
+  try {
+    // Metrics service doesn't have JWT keys, use secret only
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).send('<h1>Invalid Token</h1><p>Please <a href="http://localhost:5173/login">login again</a> to access API documentation</p>');
+  }
+}
+
 if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use('/api-docs', swaggerAuthMiddleware, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   console.log(`Swagger documentation available at http://localhost:${PORT}/api-docs`);
 }
 

@@ -11,6 +11,16 @@ export default function MetricsPage() {
   const [error, setError] = useState("");
   const [clearingBacklog, setClearingBacklog] = useState(false);
 
+  // Swagger UI endpoints per service
+  const swaggerDocs = [
+    { name: 'User', url: 'http://localhost:4001/docs' },
+    { name: 'Course', url: 'http://localhost:4002/docs' },
+    { name: 'Planner', url: 'http://localhost:4003/docs' },
+    { name: 'Weather', url: 'http://localhost:4004/docs' },
+    { name: 'Recommendation', url: 'http://localhost:4005/docs' },
+    { name: 'Metrics', url: 'http://localhost:4007/api-docs' },
+  ];
+
   useEffect(() => {
     loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,6 +184,19 @@ export default function MetricsPage() {
               </span>
             )}
           </Button>
+        </div>
+
+        {/* Swagger UI shortcuts */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {swaggerDocs.map((doc) => (
+            <Button
+              key={doc.url}
+              onClick={() => window.open(doc.url, '_blank')}
+              className="bg-slate-700 hover:bg-slate-600"
+            >
+              {doc.name} Swagger
+            </Button>
+          ))}
         </div>
 
         {error && (

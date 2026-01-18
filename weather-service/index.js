@@ -4,6 +4,7 @@ const Redis = require('ioredis');
 const cors = require('cors');
 const yaml = require('js-yaml');
 const { v4: uuidv4 } = require('uuid');
+const cookieParser = require('cookie-parser');
 const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const app = express();
@@ -11,6 +12,7 @@ const app = express();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 // ===== CORRELATION ID MIDDLEWARE =====
 app.use((req, res, next) => {
@@ -84,8 +86,6 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
-app.use(authMiddleware);
-
 const REDIS_HOST = process.env.REDIS_HOST || '127.0.0.1';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
 const PORT = parseInt(process.env.PORT || '4004', 10);
@@ -93,17 +93,35 @@ const DEFAULT_TTL = parseInt(process.env.DEFAULT_TTL || '3600', 10);
 
 const redis = new Redis({ host: REDIS_HOST, port: REDIS_PORT });
 
-// Swagger (dev only) - load openapi.yaml if present
+// Cookie-based auth middleware for Swagger UI
+function swaggerAuthMiddleware(req, res, next) {
+  const token = req.cookies.auth_token;
+  if (!token) {
+    return res.status(401).send('<h1>Unauthorized</h1><p>Please <a href="http://localhost:5173/login">login</a> first to access API documentation</p>');
+  }
+  
+  try {
+    const decoded = PUBLIC_KEY ? jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] }) : jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).send('<h1>Invalid Token</h1><p>Please <a href="http://localhost:5173/login">login again</a> to access API documentation</p>');
+  }
+}
+
+// Swagger (dev only) - load openapi.yaml if present - PROTECTED by cookie auth
 if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
   try {
     const swaggerUi = require('swagger-ui-express');
     const specRaw = fs.readFileSync(require('path').join(__dirname, 'openapi.yaml'), 'utf8');
     const swaggerSpec = yaml.load(specRaw);
-    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.use('/docs', swaggerAuthMiddleware, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   } catch (err) {
     console.warn('Swagger openapi.yaml not found or failed to load:', err.message || err);
   }
 }
+
+app.use(authMiddleware);
 
 // Seed initial data (only sets keys if they don't already exist)
 async function seedInitialData() {

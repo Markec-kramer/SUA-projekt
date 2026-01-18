@@ -172,13 +172,31 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// Swagger (dev only) - load openapi.yaml if present
+// Cookie-based auth middleware for Swagger UI
+function swaggerAuthMiddleware(req, res, next) {
+  const token = req.cookies.auth_token;
+  if (!token) {
+    return res.status(401).send('<h1>Unauthorized</h1><p>Please <a href="http://localhost:5173/login">login</a> first to access API documentation</p>');
+  }
+  
+  try {
+    let decoded;
+    if (PUBLIC_KEY) decoded = jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] });
+    else decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).send('<h1>Invalid Token</h1><p>Please <a href="http://localhost:5173/login">login again</a> to access API documentation</p>');
+  }
+}
+
+// Swagger (dev only) - load openapi.yaml if present - PROTECTED by cookie auth
 if (process.env.SWAGGER_ENABLED === '1' || process.env.NODE_ENV === 'development') {
   try {
     const swaggerUi = require('swagger-ui-express');
     const specRaw = fs.readFileSync(require('path').join(__dirname, 'openapi.yaml'), 'utf8');
     const swaggerSpec = yaml.load(specRaw);
-    app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    app.use('/docs', swaggerAuthMiddleware, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   } catch (err) {
     console.warn('Swagger openapi.yaml not found or failed to load:', err.message || err);
   }
@@ -336,6 +354,14 @@ app.post("/users/login", async (req, res) => {
       sameSite: 'lax',
       secure: COOKIE_SECURE,
       maxAge: REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000,
+    });
+
+    // set access token cookie for Swagger UI authentication
+    res.cookie('auth_token', accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: COOKIE_SECURE,
+      maxAge: 60 * 60 * 1000, // 1 hour, matches JWT expiry
     });
 
     logger.info(req.path, req.correlationId, `User logged in successfully: ${user.id}`);

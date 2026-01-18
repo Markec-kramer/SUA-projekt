@@ -3,6 +3,7 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const axios = require("axios");
 const { v4: uuidv4 } = require('uuid');
+const cookieParser = require('cookie-parser');
 const { initializeLogger, logger, closeLogger } = require('./logger');
 
 const app = express();
@@ -23,6 +24,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 console.log(`[course-service] CORS_ORIGIN=${CORS_ORIGIN}`);
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // ===== CORRELATION ID MIDDLEWARE =====
 app.use((req, res, next) => {
@@ -116,9 +118,23 @@ app.get('/internal/courses/:id/exists', async (req, res) => {
   }
 });
 
-app.use(authMiddleware);
+// Cookie-based auth middleware for Swagger UI
+function swaggerAuthMiddleware(req, res, next) {
+  const token = req.cookies.auth_token;
+  if (!token) {
+    return res.status(401).send('<h1>Unauthorized</h1><p>Please <a href="http://localhost:5173/login">login</a> first to access API documentation</p>');
+  }
+  
+  try {
+    const decoded = PUBLIC_KEY ? jwt.verify(token, PUBLIC_KEY, { algorithms: ['RS256'] }) : jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).send('<h1>Invalid Token</h1><p>Please <a href="http://localhost:5173/login">login again</a> to access API documentation</p>');
+  }
+}
 
-// Swagger (dev only)
+// Swagger (dev only) - PROTECTED by cookie auth
 if (process.env.SWAGGER_ENABLED === "1" || process.env.NODE_ENV === "development") {
   const swaggerUi = require("swagger-ui-express");
   const swaggerJSDoc = require("swagger-jsdoc");
@@ -135,8 +151,10 @@ if (process.env.SWAGGER_ENABLED === "1" || process.env.NODE_ENV === "development
     },
     apis: [__filename],
   });
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use("/docs", swaggerAuthMiddleware, swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
+
+app.use(authMiddleware);
 
 // DB pool
 const pool = new Pool({
