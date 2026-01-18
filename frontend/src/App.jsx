@@ -21,22 +21,22 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen">
-      <nav className="bg-slate-900 border-b border-slate-700">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
+      <nav className="bg-slate-100 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700">
         <div className="app-shell flex items-center gap-4">
-          <Link to="/" className="text-white">Home</Link>
-          <Link to="/courses" className="text-slate-200">Courses</Link>
-          <Link to="/planner" className="text-slate-200">Planner</Link>
-          <Link to="/weather" className="text-slate-200">Weather</Link>
-          <Link to="/recommendations" className="text-slate-200">Recommendations</Link>
-          <Link to="/metrics" className="text-slate-200">Metrics</Link>
+          <Link to="/" className="text-slate-900 dark:text-white font-semibold">Home</Link>
+          <Link to="/courses" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Courses</Link>
+          <Link to="/planner" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Planner</Link>
+          <Link to="/weather" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Weather</Link>
+          <Link to="/recommendations" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Recommendations</Link>
+          <Link to="/metrics" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Metrics</Link>
 
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle />
             {!user ? (
               <>
-                <Link to="/login" className="mr-4 text-slate-200">Login</Link>
-                <Link to="/register" className="text-slate-200">Register</Link>
+                <Link to="/login" className="mr-4 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Login</Link>
+                <Link to="/register" className="text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white">Register</Link>
               </>
             ) : (
               <Button onClick={handleLogout}>Logout</Button>
