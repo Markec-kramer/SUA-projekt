@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { fetchWithAuth } from '../api';
 import Card from "../components/Card";
@@ -59,27 +59,64 @@ export default function LoginPage() {
   }
 
   return (
-    <div>
-      <Card>
-        <h2 className="text-xl font-semibold mb-3">Prijava</h2>
-        <form onSubmit={handleLogin} className="flex flex-col max-w-xs gap-3">
-          <input
-            className="p-2 rounded bg-slate-700"
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            className="p-2 rounded bg-slate-700"
-            type="password"
-            placeholder="Geslo"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Button type="submit">Prijava</Button>
+    <div className="h-full flex items-center justify-center p-4 relative">
+
+      <Card className="w-full max-w-md">
+        <h2 className="text-center text-2xl font-bold mb-6">Log in</h2>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Email</label>
+            <input
+              className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="email"
+              placeholder="ime@primer.si"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm text-slate-400">Geslo</label>
+              <a href="#" className="text-xs text-slate-400 hover:text-slate-300">FORGOT?</a>
+            </div>
+            <input
+              className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+            LOG IN
+          </Button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-2">
+            <div className="h-px flex-1 bg-slate-700" />
+            <span className="text-xs text-slate-400">OR</span>
+            <div className="h-px flex-1 bg-slate-700" />
+          </div>
+
+          <Link to="/register">
+            <Button type="submit" className="w-full p-5 mt-5 bg-blue-600 hover:bg-blue-700">
+            Sign Up
+            </Button>
+          </Link>
+
+          {message && (
+            <div className="mt-3 text-center text-slate-300 text-sm">{message}</div>
+          )}
+
+          <p className="mt-4 text-center text-xs text-slate-500">
+            By signing in you agree to our Terms and Privacy Policy.
+          </p>
         </form>
-        {message && <p className="mt-3">{message}</p>}
       </Card>
     </div>
   );
