@@ -131,6 +131,13 @@ export default function PlannerPage() {
     }
   };
 
+  const renderWeather = (ws) => {
+    if (!ws) return null;
+    const cond = ws.conditions || ws.condition || 'unknown';
+    const temp = ws.tempC ?? ws.temp ?? null;
+    return `${cond}${temp !== null ? `, ${temp}°C` : ''}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -212,6 +219,14 @@ export default function PlannerPage() {
                         </svg>
                         <span>ID: {session.id}</span>
                       </div>
+                      {session.city && (
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 12.414a2 2 0 00-2.828 0L6.343 16.657A8 8 0 1117.657 16.657z" />
+                          </svg>
+                          <span>City: {session.city}</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-2 text-sm">
@@ -221,6 +236,11 @@ export default function PlannerPage() {
                         </svg>
                         <span className="font-medium">Start:</span>
                         <span>{formatDateTime(session.start_time)}</span>
+                        {session.weather_snapshot && (
+                          <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/30 text-green-400">
+                            {renderWeather(session.weather_snapshot)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 text-slate-300">
@@ -229,6 +249,11 @@ export default function PlannerPage() {
                         </svg>
                         <span className="font-medium">End:</span>
                         <span>{formatDateTime(session.end_time)}</span>
+                        {session.weather_snapshot && (
+                          <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400">
+                            {renderWeather(session.weather_snapshot)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

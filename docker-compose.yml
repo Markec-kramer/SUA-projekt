@@ -95,6 +95,9 @@ services:
       PORT: 4003
       USER_SERVICE_URL: http://user-service:4001
       COURSE_SERVICE_URL: http://course-service:4002
+      WEATHER_SERVICE_URL: http://weather-service:4004
+      METRICS_SERVICE_URL: http://metrics-service:4007
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       CORS_ORIGIN: 'http://localhost:5173'
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
@@ -164,6 +167,7 @@ services:
       PORT: 4007
       SWAGGER_ENABLED: "1"
       CORS_ORIGIN: 'http://localhost:5173'
+      LOG_SERVICE_URL: http://log-service:4006
     depends_on:
       - metrics-db
     ports:

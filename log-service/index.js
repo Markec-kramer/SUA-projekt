@@ -255,6 +255,42 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
+// INTERNAL ENDPOINT - Accept direct log entries from other services
+// Usage: POST /internal/log with JSON body
+app.post('/internal/log', async (req, res) => {
+  try {
+    const { service, level = 'info', message, metadata = {} } = req.body;
+
+    if (!service || !message) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: service and message' 
+      });
+    }
+
+    const timestamp = new Date();
+    const logMessage = `${timestamp.toISOString()} ${level.toUpperCase()} ${message}`;
+
+    await pool.query(
+      `INSERT INTO logs (timestamp, service, message, raw_data) 
+       VALUES ($1, $2, $3, $4)`,
+      [timestamp, service, logMessage, JSON.stringify({ level, metadata, correlation_id: req.correlationId })]
+    );
+
+    console.log(`[${req.correlationId}] Internal log from ${service}: ${message}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Log entry recorded'
+    });
+  } catch (error) {
+    console.error(`[${req.correlationId}] Error recording internal log:`, error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // TEST ENDPOINT - Generate dummy log data for testing/demo
 // Usage: POST /test/generate-logs?count=100
 app.post('/test/generate-logs', async (req, res) => {

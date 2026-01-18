@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import Button from './Button';
+import { fetchWithAuth } from '../api';
 
 export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) {
   const [formData, setFormData] = useState({
@@ -8,11 +9,43 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
     courseId: '',
     startTime: '',
     endTime: '',
+    city: 'ljubljana',
     description: '',
     priority: 'medium'
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cities, setCities] = useState([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+
+  // Load available cities from weather-service when modal opens
+  useEffect(() => {
+    async function loadCities() {
+      setCitiesLoading(true);
+      try {
+        const res = await fetchWithAuth('http://localhost:4004/weather');
+        const data = await res.json();
+        const names = Array.from(new Set((data || []).map((d) => (d.city || '').toLowerCase()).filter(Boolean)));
+        if (names.length > 0) {
+          setCities(names);
+          setFormData((prev) => ({ ...prev, city: prev.city || names[0] }));
+        } else {
+          // Fallback to common demo cities
+          const fallback = ['ljubljana', 'maribor', 'london', 'oslo', 'newyork'];
+          setCities(fallback);
+        }
+      } catch (e) {
+        const fallback = ['ljubljana', 'maribor', 'london', 'oslo', 'newyork'];
+        setCities(fallback);
+      } finally {
+        setCitiesLoading(false);
+      }
+    }
+
+    if (isOpen) {
+      loadCities();
+    }
+  }, [isOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,6 +58,10 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
     setError('');
 
     // Validation
+        if (!formData.city.trim()) {
+          setError('City is required');
+          return;
+        }
     if (!formData.title.trim()) {
       setError('Session title is required');
       return;
@@ -55,7 +92,8 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
         course_id: Number(formData.courseId),
         title: formData.title,
         start_time: formData.startTime,
-        end_time: formData.endTime
+        end_time: formData.endTime,
+        city: formData.city
       });
 
       // Reset form
@@ -64,6 +102,7 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
         courseId: '',
         startTime: '',
         endTime: '',
+        city: 'ljubljana',
         description: '',
         priority: 'medium'
       });
@@ -81,6 +120,7 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
       courseId: '',
       startTime: '',
       endTime: '',
+      city: 'ljubljana',
       description: '',
       priority: 'medium'
     });
@@ -145,7 +185,7 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
         </div>
 
         {/* Time Selection Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Start Time */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -174,6 +214,26 @@ export default function CreateSessionModal({ isOpen, onClose, onSubmit, user }) 
               className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               disabled={isSubmitting}
             />
+          </div>
+          {/* City (Dropdown) */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              City <span className="text-red-400">*</span>
+            </label>
+            <select
+              name="city"
+              value={formData.city}
+              onChange={handleChange}
+              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              disabled={isSubmitting || citiesLoading}
+            >
+              {cities.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <p className="text-sm text-slate-500 mt-1">
+              Weather will be fetched for selected city
+            </p>
           </div>
         </div>
 

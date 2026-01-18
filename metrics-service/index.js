@@ -4,9 +4,11 @@ const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJSDoc = require('swagger-jsdoc');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 4007;
+const LOG_SERVICE_URL = process.env.LOG_SERVICE_URL || 'http://localhost:4006';
 
 // ===== CORS MIDDLEWARE =====
 app.use((req, res, next) => {
@@ -350,6 +352,29 @@ app.post('/metrics/record', async (req, res) => {
     );
 
     console.log(`[${req.correlationId}] Recorded API call: ${service_name} -> ${klicanaStoritev}`);
+
+    // Send notification to log-service for important metrics
+    // Only log if response_time_ms is over threshold or specific endpoints
+    if (response_time_ms && response_time_ms > 1000) {
+      // Asynchronously notify log-service about slow endpoint
+      axios.post(`${LOG_SERVICE_URL}/internal/log`, {
+        service: 'metrics-service',
+        level: 'warn',
+        message: `Slow endpoint detected: ${service_name} -> ${klicanaStoritev} (${response_time_ms}ms)`,
+        metadata: {
+          endpoint: klicanaStoritev,
+          method,
+          service_name,
+          response_time_ms
+        }
+      }, {
+        headers: {
+          'x-correlation-id': req.correlationId
+        }
+      }).catch(err => {
+        console.warn(`[${req.correlationId}] Failed to notify log-service:`, err.message);
+      });
+    }
 
     res.status(200).json({
       message: 'Klic je bil uspešno zabeležen',

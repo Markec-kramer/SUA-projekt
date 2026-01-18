@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import psycopg2
+from psycopg2.extras import Json
 import requests
 from datetime import datetime
 import jwt
@@ -57,6 +58,16 @@ if SWAGGER_ENABLED:
 else:
     # disable built-in docs/openapi when not enabled
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+# CORS middleware to allow frontend origin
+CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[CORS_ORIGIN],
+    allow_credentials=True,
+    allow_methods=["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # Correlation ID middleware
 @app.middleware("http")
@@ -118,6 +129,7 @@ DB_CONFIG = {
 
 USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:4001")
 COURSE_SERVICE_URL = os.getenv("COURSE_SERVICE_URL", "http://localhost:4002")
+WEATHER_SERVICE_URL = os.getenv("WEATHER_SERVICE_URL", "http://localhost:4004")
 
 
 # DB connection helper
@@ -142,6 +154,9 @@ def init_db():
         );
         """
     )
+    # Add columns for weather integration if they don't exist
+    cur.execute("ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS city VARCHAR(100) NOT NULL DEFAULT 'ljubljana';")
+    cur.execute("ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS weather_snapshot JSONB;")
     conn.commit()
     cur.close()
     conn.close()
@@ -155,11 +170,14 @@ class StudySessionIn(BaseModel):
     title: str
     start_time: str  # ISO string
     end_time: str    # ISO string
+    city: Optional[str] = "ljubljana"
 
 
 class StudySessionOut(StudySessionIn):
     id: int
     status: str
+    city: Optional[str] = None
+    weather_snapshot: Optional[dict] = None
 
 
 # Helpers to check remote services
@@ -177,6 +195,22 @@ def course_exists(course_id: int, token: Optional[str] = None) -> bool:
         return r.status_code == 200 and r.json().get('exists') == True
     except:
         return False
+
+
+def get_weather_for_location(city: str = "ljubljana", token: Optional[str] = None) -> Optional[dict]:
+    """Fetch weather data from weather-service for a given city"""
+    try:
+        headers = {}
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+        
+        r = requests.get(f"{WEATHER_SERVICE_URL}/weather/{city}", headers=headers, timeout=2)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception as e:
+        print(f"Failed to fetch weather: {e}")
+        return None
 
 
 @app.on_event("startup")
@@ -217,7 +251,7 @@ def list_sessions(request: Request, user_id: Optional[int] = None, current_user=
         log_info(request.url.path, request.state.correlation_id, f"Fetching study sessions for user_id: {user_id}")
         cur.execute(
             """
-            SELECT id,user_id,course_id,title,start_time,end_time,status
+            SELECT id,user_id,course_id,title,start_time,end_time,status,city,weather_snapshot
             FROM study_sessions
             WHERE user_id=%s
             ORDER BY start_time
@@ -228,7 +262,7 @@ def list_sessions(request: Request, user_id: Optional[int] = None, current_user=
         log_info(request.url.path, request.state.correlation_id, "Fetching all study sessions")
         cur.execute(
             """
-            SELECT id,user_id,course_id,title,start_time,end_time,status
+            SELECT id,user_id,course_id,title,start_time,end_time,status,city,weather_snapshot
             FROM study_sessions
             ORDER BY start_time
             """
@@ -247,7 +281,9 @@ def list_sessions(request: Request, user_id: Optional[int] = None, current_user=
             title=r[3],
             start_time=r[4].isoformat(),
             end_time=r[5].isoformat(),
-            status=r[6]
+            status=r[6],
+            city=r[7],
+            weather_snapshot=r[8]
         )
         for r in rows
     ]
@@ -260,7 +296,7 @@ def get_session(request: Request, session_id: int, current_user=Depends(get_curr
     log_info(request.url.path, request.state.correlation_id, f"Fetching study session with id: {session_id}")
     cur.execute(
         """
-        SELECT id,user_id,course_id,title,start_time,end_time,status
+        SELECT id,user_id,course_id,title,start_time,end_time,status,city,weather_snapshot
         FROM study_sessions
         WHERE id=%s
         """,
@@ -283,6 +319,8 @@ def get_session(request: Request, session_id: int, current_user=Depends(get_curr
         start_time=row[4].isoformat(),
         end_time=row[5].isoformat(),
         status=row[6],
+        city=row[7],
+        weather_snapshot=row[8]
     )
 
 
@@ -302,13 +340,31 @@ def create_session(request: Request, session: StudySessionIn, current_user=Depen
         log_error(request.url.path, request.state.correlation_id, f"Course {session.course_id} does not exist")
         raise HTTPException(status_code=400, detail="Course ne obstaja")
 
+    # Fetch weather data from weather-service for provided city
+    city = session.city or "ljubljana"
+    weather_data = None
+    try:
+        headers = {"x-correlation-id": request.state.correlation_id}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        r = requests.get(f"{WEATHER_SERVICE_URL}/weather/{city}", headers=headers, timeout=2)
+        if r.status_code == 200:
+            weather_data = r.json()
+    except Exception as e:
+        print(f"Failed to fetch weather for {city}: {e}")
+    if weather_data:
+        weather_info = f"{weather_data.get('conditions', 'unknown')}, {weather_data.get('tempC', 'N/A')}°C"
+        log_info(request.url.path, request.state.correlation_id, f"Weather fetched for study session: {weather_info}")
+    else:
+        log_info(request.url.path, request.state.correlation_id, "Weather data not available")
+
     conn = get_conn()
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO study_sessions (user_id, course_id, title, start_time, end_time)
-        VALUES (%s,%s,%s,%s,%s)
-        RETURNING id,user_id,course_id,title,start_time,end_time,status
+        INSERT INTO study_sessions (user_id, course_id, title, start_time, end_time, city, weather_snapshot)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id,user_id,course_id,title,start_time,end_time,status,city,weather_snapshot
         """,
         (
             session.user_id,
@@ -316,6 +372,8 @@ def create_session(request: Request, session: StudySessionIn, current_user=Depen
             session.title,
             session.start_time,
             session.end_time,
+            city,
+            Json(weather_data) if weather_data else None,
         ),
     )
 
@@ -333,6 +391,8 @@ def create_session(request: Request, session: StudySessionIn, current_user=Depen
         start_time=row[4].isoformat(),
         end_time=row[5].isoformat(),
         status=row[6],
+        city=row[7],
+        weather_snapshot=row[8]
     )
 
 
