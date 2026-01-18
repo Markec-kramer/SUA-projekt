@@ -12,7 +12,20 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const JWT_EXP = process.env.JWT_EXP || "1h";
 
 const app = express();
+
+// Explicit CORS fallback middleware (ensures proper headers for credentialed requests)
+app.use((req, res, next) => {
+  const origin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+console.log(`[user-service] CORS_ORIGIN=${CORS_ORIGIN}`);
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());

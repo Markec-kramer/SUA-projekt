@@ -4,7 +4,19 @@ const { Pool } = require('pg');
 const amqp = require('amqplib');
 
 const app = express();
-app.use(cors());
+
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const corsOptions = {
+  origin: FRONTEND_ORIGIN,
+  credentials: true,
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+console.log(`[log-service] FRONTEND_ORIGIN=${FRONTEND_ORIGIN}`);
+console.log('[log-service] CORS options:', corsOptions);
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const PORT = process.env.PORT || 4006;

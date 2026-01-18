@@ -26,6 +26,7 @@ services:
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
       JWT_PRIVATE_KEY_PATH: /app/auth/private.pem
+      CORS_ORIGIN: 'http://localhost:5173'
     depends_on:
       - user-db
     ports:
@@ -57,6 +58,7 @@ services:
       DB_NAME: course_db
       PORT: 4002
       USER_SERVICE_URL: http://user-service:4001
+      CORS_ORIGIN: 'http://localhost:5173'
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
@@ -93,6 +95,7 @@ services:
       PORT: 4003
       USER_SERVICE_URL: http://user-service:4001
       COURSE_SERVICE_URL: http://course-service:4002
+      CORS_ORIGIN: 'http://localhost:5173'
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
@@ -123,6 +126,7 @@ services:
       REDIS_PORT: 6379
       PORT: 4004
       DEFAULT_TTL: 3600
+      CORS_ORIGIN: 'http://localhost:5173'
       SWAGGER_ENABLED: "1"
       JWT_SECRET: dev_secret
       JWT_PUBLIC_KEY_PATH: /app/auth/public.pem
@@ -205,6 +209,7 @@ services:
       DB_NAME: log_db
       PORT: 4006
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      FRONTEND_ORIGIN: 'http://localhost:5173'
     depends_on:
       - log-db
       - rabbitmq

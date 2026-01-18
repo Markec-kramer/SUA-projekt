@@ -27,7 +27,28 @@ body {
 }
 
 /* small container */
-.app-shell { padding: 1.25rem; max-width: 1000px; margin: 0 auto; }
+.app-shell { padding: 1.25rem; max-width: 1200px; margin: 0 auto; }
 
 /* simple card */
 .card { @apply bg-slate-800 p-4 rounded-lg shadow-md text-white; }
+
+/* Line clamp utilities */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
